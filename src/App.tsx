@@ -76,7 +76,107 @@ const MOVES_BY_ID: Record<string, Move[]> = {
   'MSK-MAH-2': MSK_MAH_2_MOVES,
 };
 
-// ===== Utilities for pan and zoom =====
+// ===== Utilities =====
+function computePositions(lines: LineDef[], moves: Record<string,Move[]>, start:{x:number;y:number}){
+  const pos: Record<string,{x:number;y:number}> = {};
+  const ensure = (name:string, x:number,y:number)=>{ if(!(name in pos)) pos[name] = {x,y}; return pos[name]; };
+
+  for(const line of lines){
+    const mv = moves[line.id]; if(!mv) continue;
+    const st = line.stations; if(st.length<2) continue;
+    // start point for this line
+    const p0 = ensure(st[0], start.x, start.y);
+    let cur = p0;
+    for(let i=1;i<st.length;i++){
+      const step = mv[i-1];
+      const vec = VEC[step as Move];
+      if(!vec) throw new Error(`Unknown move "${step}" in ${line.id} @${i-1}`);
+      const [dx,dy] = vec;
+      const next = ensure(st[i], cur.x + dx, cur.y + dy);
+      cur = next;
+    }
+  }
+  return pos;
+}
+
+// Build undirected edge list per line
+function buildEdges(line: LineDef, pos: Record<string,{x:number;y:number}>){
+  const out: Array<{a:string;b:string;lineId:string}> = [];
+  for(let i=0;i<line.stations.length-1;i++){
+    const a = line.stations[i], b = line.stations[i+1];
+    if(!pos[a] || !pos[b]) continue;
+    out.push({a,b,lineId: line.id});
+  }
+  return out;
+}
+
+function edgeKey(a:string,b:string){ return a<b? `${a}__${b}` : `${b}__${a}`; }
+
+function unitPerp(ax:number, ay:number, bx:number, by:number){
+  const dx = bx-ax, dy = by-ay; const len = Math.hypot(dx,dy) || 1;
+  // perpendicular (rotate 90deg): (-dy, dx)
+  return {px: -dy/len, py: dx/len};
+}
+
+// Label placement (collision-avoidant)
+function estimateTextSize(text:string, fontSize=13){ const w=Math.ceil(text.length*fontSize*0.62), h=Math.ceil(fontSize*1.25); return {w,h}; }
+
+type LabelPlacement = { x:number; y:number; anchor: 'start'|'end' };
+function placeLabels(names:string[], pos:Record<string,{x:number;y:number}>, fontSize=13){
+  const placed: Record<string, LabelPlacement> = {}; const rects: Array<{x:number;y:number;w:number;h:number}> = [];
+  const entries = names.map(n=>[n,pos[n]] as const).sort((a,b)=>(a[1].y-b[1].y)||(a[1].x-b[1].x));
+  const collide=(r:{x:number;y:number;w:number;h:number})=>rects.some(q=>!(r.x+r.w<q.x||q.x+q.w<r.x||r.y+r.h<q.y||q.y+q.h<r.y));
+  const mk=(name:string,x:number,y:number,anchor:'start'|'end')=>{ const {w,h}=estimateTextSize(name,fontSize); const pad=2; const rx=anchor==='start'?x:x-w; const ry=y-h+4; return {rect:{x:rx-pad,y:ry-pad,w:w+pad*2,h:h+pad*2}}; };
+  for(const [name,p] of entries){
+    let chosen: LabelPlacement|undefined; const radii=[16,22,28,36,44,52,64,80,96,112,128,144,160];
+    for(const d of radii){
+      const cands: LabelPlacement[]=[{x:p.x+d,y:p.y-d*0.6,anchor:'start'},{x:p.x+d,y:p.y+d*0.9,anchor:'start'},{x:p.x-d,y:p.y+d*0.9,anchor:'end'},{x:p.x-d,y:p.y-d*0.6,anchor:'end'}];
+      for(const c of cands){ const {rect}=mk(name,c.x,c.y,c.anchor); if(!collide(rect)){ rects.push(rect); chosen=c; break; } }
+      if(chosen) break;
+    }
+    if(!chosen){ chosen={x:p.x+140,y:p.y+126,anchor:'start'}; const {rect}=mk(name,chosen.x,chosen.y,chosen.anchor); rects.push(rect); }
+    placed[name]=chosen;
+  }
+  return placed;
+}
+
+// ===== Self-tests (runtime diagnostics) =====
+function runSelfTests(pos: Record<string,{x:number;y:number}>){
+  const messages: string[] = [];
+  const errors: string[] = [];
+  for(const l of LINES){
+    const mv = MOVES_BY_ID[l.id];
+    if(!mv){ errors.push(`Нет последовательности ходов для линии ${l.id}`); continue; }
+    if(mv.length !== l.stations.length - 1){
+      errors.push(`Длина moves (${mv.length}) не равна stations-1 (${l.stations.length-1}) для ${l.id}`);
+    }
+    mv.forEach((m,i)=>{ if(!(m in VEC)) errors.push(`Неизвестный ход "${m}" в ${l.id} @${i}`); });
+    messages.push(`OK: ${l.id} — ${l.stations.length} станций, ${mv.length} ходов`);
+  }
+
+  // extra tests: проверим, что общие ребра действительно существуют и ≥2 линий их делят
+  const allEdges = LINES.flatMap(l=>buildEdges(l, pos));
+  const groups = new Map<string, string[]>();
+  allEdges.forEach(e=>{
+    const k=edgeKey(e.a,e.b);
+    if(!groups.has(k)) groups.set(k,[]);
+    groups.get(k)!.push(e.lineId);
+  });
+  const mustShare = [
+    edgeKey('Новосибирск','Омск'), // все 3
+    edgeKey('Набережные Челны','Казань'), // обе Нск→Мск
+    edgeKey('Омск','Курган'), // розовая + оранжевая
+  ];
+  mustShare.forEach(k=>{
+    const arr = groups.get(k)||[];
+    if(arr.length<2) errors.push(`Ожидалась параллельная отрисовка для ребра ${k}, но найдено ${arr.length}`);
+    else messages.push(`Shared edge ${k}: ${arr.join(', ')}`);
+  });
+
+  return {messages, errors};
+}
+
+// ===== Zoom functionality =====
 const MetroMapStrict = () => {
   const [scale, setScale] = useState(1);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -88,6 +188,13 @@ const MetroMapStrict = () => {
 
   const handleZoomIn = () => setScale(prevScale => Math.min(prevScale + 0.1, 2)); // Zoom in
   const handleZoomOut = () => setScale(prevScale => Math.max(prevScale - 0.1, 0.5)); // Zoom out
+
+  const pos = useMemo(() => computePositions(LINES, MOVES_BY_ID, {x: 1100, y: 520}), []);
+  const stations = useMemo(() => Array.from(new Set(LINES.flatMap(l => l.stations))), []);
+  const labels = useMemo(() => placeLabels(stations, pos, 13), [pos]);
+
+  // Run self-tests (after positions known)
+  const { messages, errors } = runSelfTests(pos);
 
   return (
     <div className="w-full min-h-screen bg-white text-gray-900 p-4 space-y-4">
@@ -104,44 +211,47 @@ const MetroMapStrict = () => {
           {/* Lines (per-edge with parallel offsets for shared segments) */}
           {(() => {
             const allEdges = LINES.flatMap(l => buildEdges(l, pos));
-            const groups = new Map<string, Array<{a:string;b:string;lineId:string}>>();
-            allEdges.forEach(e=>{
-              const k = edgeKey(e.a,e.b);
-              if(!groups.has(k)) groups.set(k,[]);
+            const groups = new Map<string, Array<{a: string; b: string; lineId: string}>>();
+            allEdges.forEach(e => {
+              const k = edgeKey(e.a, e.b);
+              if (!groups.has(k)) groups.set(k, []);
               groups.get(k)!.push(e);
             });
             const offsetStep = 8; // px
             const elems: JSX.Element[] = [];
-            groups.forEach((arr, k)=>{
+            groups.forEach((arr, k) => {
               // stable order by lineId for deterministic stacking
-              arr.sort((x,y)=> x.lineId.localeCompare(y.lineId));
+              arr.sort((x, y) => x.lineId.localeCompare(y.lineId));
               const n = arr.length;
-              arr.forEach((e, idx)=>{
+              arr.forEach((e, idx) => {
                 const A = pos[e.a], B = pos[e.b];
-                const {px,py} = unitPerp(A.x,A.y,B.x,B.y);
-                const off = (idx - (n-1)/2) * offsetStep;
-                const x1 = A.x + px*off, y1 = A.y + py*off;
-                const x2 = B.x + px*off, y2 = B.y + py*off;
-                const color = LINES.find(l=>l.id===e.lineId)!.color;
-                elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round"/>);
+                const { px, py } = unitPerp(A.x, A.y, B.x, B.y);
+                const off = (idx - (n - 1) / 2) * offsetStep;
+                const x1 = A.x + px * off, y1 = A.y + py * off;
+                const x2 = B.x + px * off, y2 = B.y + py * off;
+                const color = LINES.find(l => l.id === e.lineId)!.color;
+                elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />);
               });
             });
             return elems;
           })()}
 
           {/* Stations */}
-          {stations.map(name=>{
+          {stations.map(name => {
             const p = pos[name];
-            return <circle key={name} cx={p.x} cy={p.y} r={5} fill="#111" />
+            return <circle key={name} cx={p.x} cy={p.y} r={5} fill="#111" />;
           })}
 
           {/* Labels + hub boxes */}
-          {stations.map(name=>{
-            const p = pos[name]; const lab = labels[name]; const isHub = HUBS.has(name); const {w,h}=estimateTextSize(name,13);
+          {stations.map(name => {
+            const p = pos[name];
+            const lab = labels[name];
+            const isHub = HUBS.has(name);
+            const { w, h } = estimateTextSize(name, 13);
             return (
-              <g key={name+"_lab"}>
+              <g key={name + "_lab"}>
                 {isHub && (
-                  <rect x={lab.anchor==='start'? lab.x-4 : lab.x-w-4} y={lab.y-h-4} width={w+8} height={h+8} fill="#fff" stroke="#3b82f6" strokeWidth={1.5} rx={6} ry={6} />
+                  <rect x={lab.anchor === 'start' ? lab.x - 4 : lab.x - w - 4} y={lab.y - h - 4} width={w + 8} height={h + 8} fill="#fff" stroke="#3b82f6" strokeWidth={1.5} rx={6} ry={6} />
                 )}
                 <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
               </g>
@@ -151,6 +261,6 @@ const MetroMapStrict = () => {
       </div>
     </div>
   );
-}
+};
 
 export default MetroMapStrict;

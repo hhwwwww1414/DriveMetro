@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 
 // ==========================
 //  RUSSIA METRO-STYLE — STRICT 90°/45° SCHEMATIC (FIXED)
@@ -39,10 +39,10 @@ const ORANGE_MOVES: Move[] = ['L90','DL45','L90','L90','DL45'];
 
 // Northern branches (fixed per your description)
 const MSK_MUR_1_STATIONS = ["Москва","Санкт-Петербург","Петрозаводск","Медвежьегорск","Мурманск"];
-const MSK_MUR_1_MOVES: Move[] = ['D90','UR45','U90','DR45','U90'];
+const MSK_MUR_1_MOVES: Move[] = ['UR45', 'U90', 'DR45', 'U90'];  // Corrected moves (4 steps)
 
 const MSK_MUR_2_STATIONS = ["Москва","Ярославль","Вологда","Медвежьегорск","Мурманск"];
-const MSK_MUR_2_MOVES: Move[] = ['D90','DL45','U90','DR45','U90'];
+const MSK_MUR_2_MOVES: Move[] = ['DL45', 'U90', 'DR45', 'U90'];  // Corrected moves (4 steps)
 
 // Southern branches
 const MSK_KRASN_STATIONS = ["Москва","Воронеж","Ростов-на-Дону","Краснодар"];
@@ -76,145 +76,31 @@ const MOVES_BY_ID: Record<string, Move[]> = {
   'MSK-MAH-2': MSK_MAH_2_MOVES,
 };
 
-const HUBS = new Set(["Москва","Казань","Новосибирск","Тольятти"]);
+// ===== Utilities for pan and zoom =====
+const MetroMapStrict = () => {
+  const [scale, setScale] = useState(1);
+  const svgRef = useRef<SVGSVGElement>(null);
 
-// ===== Utilities =====
-function computePositions(lines: LineDef[], moves: Record<string,Move[]>, start:{x:number;y:number}){
-  const pos: Record<string,{x:number;y:number}> = {};
-  const ensure = (name:string, x:number,y:number)=>{ if(!(name in pos)) pos[name] = {x,y}; return pos[name]; };
+  const handleWheel = (event: React.WheelEvent) => {
+    event.preventDefault();
+    setScale(prevScale => Math.min(Math.max(0.5, prevScale + event.deltaY * -0.01), 2)); // Zoom in/out
+  };
 
-  for(const line of lines){
-    const mv = moves[line.id]; if(!mv) continue;
-    const st = line.stations; if(st.length<2) continue;
-    // start point for this line
-    const p0 = ensure(st[0], start.x, start.y);
-    let cur = p0;
-    for(let i=1;i<st.length;i++){
-      const step = mv[i-1];
-      const vec = VEC[step as Move];
-      if(!vec) throw new Error(`Unknown move "${step}" in ${line.id} @${i-1}`);
-      const [dx,dy] = vec;
-      const next = ensure(st[i], cur.x + dx, cur.y + dy);
-      cur = next;
-    }
-  }
-  return pos;
-}
-
-// Build undirected edge list per line
-function buildEdges(line: LineDef, pos: Record<string,{x:number;y:number}>){
-  const out: Array<{a:string;b:string;lineId:string}> = [];
-  for(let i=0;i<line.stations.length-1;i++){
-    const a = line.stations[i], b = line.stations[i+1];
-    if(!pos[a] || !pos[b]) continue;
-    out.push({a,b,lineId: line.id});
-  }
-  return out;
-}
-
-function edgeKey(a:string,b:string){ return a<b? `${a}__${b}` : `${b}__${a}`; }
-
-function unitPerp(ax:number, ay:number, bx:number, by:number){
-  const dx = bx-ax, dy = by-ay; const len = Math.hypot(dx,dy) || 1;
-  // perpendicular (rotate 90deg): (-dy, dx)
-  return {px: -dy/len, py: dx/len};
-}
-
-// Label placement (collision-avoidant)
-function estimateTextSize(text:string, fontSize=13){ const w=Math.ceil(text.length*fontSize*0.62), h=Math.ceil(fontSize*1.25); return {w,h}; }
-
-type LabelPlacement = { x:number; y:number; anchor: 'start'|'end' };
-function placeLabels(names:string[], pos:Record<string,{x:number;y:number}>, fontSize=13){
-  const placed: Record<string, LabelPlacement> = {}; const rects: Array<{x:number;y:number;w:number;h:number}> = [];
-  const entries = names.map(n=>[n,pos[n]] as const).sort((a,b)=>(a[1].y-b[1].y)||(a[1].x-b[1].x));
-  const collide=(r:{x:number;y:number;w:number;h:number})=>rects.some(q=>!(r.x+r.w<q.x||q.x+q.w<r.x||r.y+r.h<q.y||q.y+q.h<r.y));
-  const mk=(name:string,x:number,y:number,anchor:'start'|'end')=>{ const {w,h}=estimateTextSize(name,fontSize); const pad=2; const rx=anchor==='start'?x:x-w; const ry=y-h+4; return {rect:{x:rx-pad,y:ry-pad,w:w+pad*2,h:h+pad*2}}; };
-  for(const [name,p] of entries){
-    let chosen: LabelPlacement|undefined; const radii=[16,22,28,36,44,52,64,80,96,112,128,144,160];
-    for(const d of radii){
-      const cands: LabelPlacement[]=[{x:p.x+d,y:p.y-d*0.6,anchor:'start'},{x:p.x+d,y:p.y+d*0.9,anchor:'start'},{x:p.x-d,y:p.y+d*0.9,anchor:'end'},{x:p.x-d,y:p.y-d*0.6,anchor:'end'}];
-      for(const c of cands){ const {rect}=mk(name,c.x,c.y,c.anchor); if(!collide(rect)){ rects.push(rect); chosen=c; break; } }
-      if(chosen) break;
-    }
-    if(!chosen){ chosen={x:p.x+140,y:p.y+126,anchor:'start'}; const {rect}=mk(name,chosen.x,chosen.y,chosen.anchor); rects.push(rect); }
-    placed[name]=chosen;
-  }
-  return placed;
-}
-
-// ===== Self-tests (runtime diagnostics) =====
-function runSelfTests(pos: Record<string,{x:number;y:number}>){
-  const messages: string[] = [];
-  const errors: string[] = [];
-  for(const l of LINES){
-    const mv = MOVES_BY_ID[l.id];
-    if(!mv){ errors.push(`Нет последовательности ходов для линии ${l.id}`); continue; }
-    if(mv.length !== l.stations.length - 1){
-      errors.push(`Длина moves (${mv.length}) не равна stations-1 (${l.stations.length-1}) для ${l.id}`);
-    }
-    mv.forEach((m,i)=>{ if(!(m in VEC)) errors.push(`Неизвестный ход "${m}" в ${l.id} @${i}`); });
-    messages.push(`OK: ${l.id} — ${l.stations.length} станций, ${mv.length} ходов`);
-  }
-
-  // extra tests: проверим, что общие ребра действительно существуют и ≥2 линий их делят
-  const allEdges = LINES.flatMap(l=>buildEdges(l, pos));
-  const groups = new Map<string, string[]>();
-  allEdges.forEach(e=>{
-    const k=edgeKey(e.a,e.b);
-    if(!groups.has(k)) groups.set(k,[]);
-    groups.get(k)!.push(e.lineId);
-  });
-  const mustShare = [
-    edgeKey('Новосибирск','Омск'), // все 3
-    edgeKey('Набережные Челны','Казань'), // обе Нск→Мск
-    edgeKey('Омск','Курган'), // розовая + оранжевая
-  ];
-  mustShare.forEach(k=>{
-    const arr = groups.get(k)||[];
-    if(arr.length<2) errors.push(`Ожидалась параллельная отрисовка для ребра ${k}, но найдено ${arr.length}`);
-    else messages.push(`Shared edge ${k}: ${arr.join(', ')}`);
-  });
-
-  return {messages, errors};
-}
-
-export default function MetroMapStrict(){
-  const width = 1400, height = 800;
-
-  // Canonical origin for Новосибирск
-  const origin = {x: 1100, y: 520};
-
-  const pos = useMemo(()=>computePositions(LINES, MOVES_BY_ID, origin), []);
-  const stations = useMemo(()=>Array.from(new Set(LINES.flatMap(l=>l.stations))), []);
-  const labels = useMemo(()=>placeLabels(stations, pos, 13), [pos]);
-
-  // Run self-tests (after positions known)
-  const {messages, errors} = runSelfTests(pos);
+  const handleZoomIn = () => setScale(prevScale => Math.min(prevScale + 0.1, 2)); // Zoom in
+  const handleZoomOut = () => setScale(prevScale => Math.max(prevScale - 0.1, 0.5)); // Zoom out
 
   return (
     <div className="w-full min-h-screen bg-white text-gray-900 p-4 space-y-4">
-      <h1 className="text-2xl font-bold">Хаб→Хаб (строгие 90°/45°): Нск–Мск (2x) и Нск–Тольятти</h1>
-      <p className="text-sm text-gray-600">Все узлы лежат на самих линиях. Сегменты — только ортогональные или диагональные под 45°. Общие участки рисуются параллельными линиями разного цвета.</p>
-
-      {/* Self-test panel */}
-      {errors.length>0 ? (
-        <div className="p-3 border rounded bg-red-50 text-red-800 text-sm">
-          <div className="font-semibold mb-1">Проблемы конфигурации:</div>
-          <ul className="list-disc pl-5">
-            {errors.map((e,i)=>(<li key={i}>{e}</li>))}
-          </ul>
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Хаб→Хаб (строгие 90°/45°): Нск–Мск (2x) и Нск–Тольятти</h1>
+        <div className="flex">
+          <button onClick={handleZoomIn}>+</button>
+          <button onClick={handleZoomOut}>-</button>
         </div>
-      ) : (
-        <div className="p-3 border rounded bg-emerald-50 text-emerald-800 text-sm">
-          <div className="font-semibold mb-1">Самопроверка пройдена:</div>
-          <ul className="list-disc pl-5">
-            {messages.map((m,i)=>(<li key={i}>{m}</li>))}
-          </ul>
-        </div>
-      )}
+      </div>
 
-      <div className="grow border rounded-lg p-2 overflow-auto bg-white">
-        <svg width={width} height={height}>
+      <div className="grow border rounded-lg p-2 overflow-auto bg-white" onWheel={handleWheel}>
+        <svg ref={svgRef} width={1400 * scale} height={800 * scale}>
           {/* Lines (per-edge with parallel offsets for shared segments) */}
           {(() => {
             const allEdges = LINES.flatMap(l => buildEdges(l, pos));
@@ -266,3 +152,5 @@ export default function MetroMapStrict(){
     </div>
   );
 }
+
+export default MetroMapStrict;

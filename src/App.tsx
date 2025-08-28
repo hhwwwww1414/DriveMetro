@@ -76,6 +76,9 @@ const MOVES_BY_ID: Record<string, Move[]> = {
   'MSK-MAH-2': MSK_MAH_2_MOVES,
 };
 
+// ===== HUBS — define the major hubs (stations) =====
+const HUBS = new Set(["Москва", "Казань", "Новосибирск", "Тольятти", "Санкт-Петербург", "Ярославль", "Воронеж", "Ростов-на-Дону"]);
+
 // ===== Utilities =====
 function computePositions(lines: LineDef[], moves: Record<string,Move[]>, start:{x:number;y:number}){
   const pos: Record<string,{x:number;y:number}> = {};

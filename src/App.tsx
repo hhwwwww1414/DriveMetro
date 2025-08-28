@@ -25,31 +25,55 @@ const VEC: Record<Move,[number,number]> = {
 const BLUE_STATIONS = [
   "Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"
 ];
-// NSK → Омск (←90) → Тюмень (↖︎45) → Екатеринбург (←90) → Набережные Челны (↘︎45) → далее всё влево до Москвы
 const BLUE_MOVES: Move[] = ['L90','UL45','L90','DL45','L90','L90','L90','L90','L90'];
 
 const PINK_STATIONS = [
   "Новосибирск","Омск","Курган","Челябинск","Уфа","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"
 ];
-// NSK → Омск (←90) → Курган (↙︎45) → Челябинск (←90) → Уфа (←90) → Н.Челны (↖︎45) → далее всё влево до Москвы
 const PINK_MOVES: Move[] = ['L90','DL45','L90','L90','UL45','L90','L90','L90','L90','L90'];
 
 const ORANGE_STATIONS = [
   "Новосибирск","Омск","Курган","Челябинск","Уфа","Тольятти"
 ];
-// Исправлено по требованиям: через Курган → Челябинск → Уфа → Тольятти
 const ORANGE_MOVES: Move[] = ['L90','DL45','L90','L90','DL45'];
+
+// Northern branches (fixed per your description)
+const MSK_MUR_1_STATIONS = ["Москва","Санкт-Петербург","Петрозаводск","Медвежьегорск","Мурманск"];
+const MSK_MUR_1_MOVES: Move[] = ['D90','UR45','U90','DR45','U90'];
+
+const MSK_MUR_2_STATIONS = ["Москва","Ярославль","Вологда","Медвежьегорск","Мурманск"];
+const MSK_MUR_2_MOVES: Move[] = ['D90','DL45','U90','DR45','U90'];
+
+// Southern branches
+const MSK_KRASN_STATIONS = ["Москва","Воронеж","Ростов-на-Дону","Краснодар"];
+const MSK_KRASN_MOVES: Move[] = ['D90','D90','D90'];
+
+const MSK_MAH_1_STATIONS = ["Москва","Тамбов","Волгоград","Элиста","Будённовск","Грозный","Махачкала"];
+const MSK_MAH_1_MOVES: Move[] = ['D90','D90','D90','D90','D90','D90'];
+
+const MSK_MAH_2_STATIONS = ["Москва","Тамбов","Волгоград","Элиста","Астрахань","Махачкала"];
+const MSK_MAH_2_MOVES: Move[] = ['D90','D90','D90','D90','D90'];
 
 const LINES: LineDef[] = [
   { id: 'NSK-MSK-1', name: 'Новосибирск→Москва (через Тюмень/Екб/Челны)', color: '#1f77b4', stations: BLUE_STATIONS },
   { id: 'NSK-MSK-2', name: 'Новосибирск→Москва (через Курган/Челябинск/Уфа)', color: '#d6277b', stations: PINK_STATIONS },
   { id: 'NSK-TLT',   name: 'Новосибирск→Тольятти (через Курган/Челябинск/Уфа)', color: '#ff7f0e', stations: ORANGE_STATIONS },
+  { id: 'MSK-MUR-1', name: 'Москва→Мурманск (через СПб/Петрозаводск/Медвежьег.)', color: '#2ca02c', stations: MSK_MUR_1_STATIONS },
+  { id: 'MSK-MUR-2', name: 'Москва→Мурманск (через Ярославль/Вологду/Медвежьег.)', color: '#17becf', stations: MSK_MUR_2_STATIONS },
+  { id: 'MSK-KRASN', name: 'Москва→Краснодар (через Воронеж/Ростов-на-Дону)', color: '#8c564b', stations: MSK_KRASN_STATIONS },
+  { id: 'MSK-MAH-1', name: 'Москва→Махачкала (через Тамбов/Волгоград/Элиста/Будённовск/Грозный)', color: '#bcbd22', stations: MSK_MAH_1_STATIONS },
+  { id: 'MSK-MAH-2', name: 'Москва→Махачкала (через Тамбов/Волгоград/Элиста/Астрахань)', color: '#e377c2', stations: MSK_MAH_2_STATIONS },
 ];
 
 const MOVES_BY_ID: Record<string, Move[]> = {
   'NSK-MSK-1': BLUE_MOVES,
   'NSK-MSK-2': PINK_MOVES,
   'NSK-TLT':   ORANGE_MOVES,
+  'MSK-MUR-1': MSK_MUR_1_MOVES,
+  'MSK-MUR-2': MSK_MUR_2_MOVES,
+  'MSK-KRASN': MSK_KRASN_MOVES,
+  'MSK-MAH-1': MSK_MAH_1_MOVES,
+  'MSK-MAH-2': MSK_MAH_2_MOVES,
 };
 
 const HUBS = new Set(["Москва","Казань","Новосибирск","Тольятти"]);

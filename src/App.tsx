@@ -5,6 +5,9 @@ import React, { useMemo, useState, useRef, useCallback } from "react";
 // - Все старые маршруты (Новосибирск-Москва и Новосибирск-Тольятти)
 // - Новые маршруты (Москва-Мурманск через СПб и через Ярославль)
 // - Исправленный маршрут Москва-Будённовск (через Элисту, не Астрахань)
+// - Новый маршрут Москва-Екатеринбург через Ярославль-Киров-Пермь
+// - Воронеж и Тамбов опущены на 1 уровень и на одной высоте по Y
+// - Пермь сдвинута вправо, чтобы быть над Казанью
 // - Полная интерактивность: зум, панорамирование, навигация
 // - Строго 90°/45° углы, параллельные линии для общих сегментов
 // ==========================
@@ -43,13 +46,17 @@ const MSK_MUR_SPB_MOVES: Move[] = ['UL45', 'U90', 'UR45', 'U90'];
 const MSK_MUR_YAR_STATIONS = ["Москва", "Ярославль", "Вологда", "Медвежьегорск", "Мурманск"];
 const MSK_MUR_YAR_MOVES: Move[] = ['UR45', 'U90', 'UL45', 'U90'];
 
-// Москва → Ростов-на-Дону (через Воронеж)
+// Москва → Ростов-на-Дону (через Воронеж) - опущен на 1 уровень
 const MSK_RST_STATIONS = ["Москва", "Воронеж", "Ростов-на-Дону"];
-const MSK_RST_MOVES: Move[] = ['D90', 'D90'];
+const MSK_RST_MOVES: Move[] = ['D90', 'D90']; // 2 хода для 3 станций (исправлено)
 
-// Москва → Будённовск (ИСПРАВЛЕНО: через Элисту, а не Астрахань)
+// Москва → Будённовск (через Тамбов, Волгоград, Элисту) - Тамбов на том же Y что и Воронеж
 const MSK_BUD_STATIONS = ["Москва", "Тамбов", "Волгоград", "Элиста", "Будённовск"];
-const MSK_BUD_MOVES: Move[] = ['DR45', 'D90', 'D90', 'D90']; // Элиста → Будённовск (вниз)
+const MSK_BUD_MOVES: Move[] = ['DR45', 'D90', 'D90', 'D90']; // Тамбов диагонально (чтобы быть на том же Y что Воронеж), 4 хода для 5 станций (исправлено)
+
+// Москва → Екатеринбург (через Ярославль, Киров, Пермь) - Пермь сдвинута вправо над Казанью
+const MSK_EKB_STATIONS = ["Москва", "Ярославль", "Киров", "Пермь", "Екатеринбург"];
+const MSK_EKB_MOVES: Move[] = ['UR45', 'UR45', 'R90', 'DL45']; // 4 хода для 5 станций (исправлено)
 
 // Дополнительная ветка: Элиста → Астрахань (для полноты карты)
 const ELISTA_AST_STATIONS = ["Элиста", "Астрахань"];
@@ -66,6 +73,7 @@ const LINES: LineDef[] = [
   { id: 'MSK-MUR-YAR', name: 'Москва→Мурманск (через Ярославль)', color: '#9467bd', stations: MSK_MUR_YAR_STATIONS },
   { id: 'MSK-RST', name: 'Москва→Ростов-на-Дону', color: '#8c564b', stations: MSK_RST_STATIONS },
   { id: 'MSK-BUD', name: 'Москва→Будённовск (через Элисту)', color: '#e377c2', stations: MSK_BUD_STATIONS },
+  { id: 'MSK-EKB', name: 'Москва→Екатеринбург (через Ярославль)', color: '#bcbd22', stations: MSK_EKB_STATIONS },
   { id: 'ELISTA-AST', name: 'Элиста→Астрахань', color: '#17becf', stations: ELISTA_AST_STATIONS },
 ];
 
@@ -77,12 +85,13 @@ const MOVES_BY_ID: Record<string, Move[]> = {
   'MSK-MUR-YAR': MSK_MUR_YAR_MOVES,
   'MSK-RST': MSK_RST_MOVES,
   'MSK-BUD': MSK_BUD_MOVES,
+  'MSK-EKB': MSK_EKB_MOVES,
   'ELISTA-AST': ELISTA_AST_MOVES,
 };
 
 const HUBS = new Set([
   "Москва", "Новосибирск", "Тольятти", "Казань", "Санкт-Петербург", 
-  "Мурманск", "Ростов-на-Дону", "Астрахань", "Медвежьегорск"
+  "Мурманск", "Ростов-на-Дону", "Астрахань", "Медвежьегорск", "Екатеринбург", "Пермь"
 ]);
 
 // ===== Утилиты =====
@@ -229,19 +238,36 @@ function runSelfTests(pos: Record<string,{x:number;y:number}>){
     messages.push(`✓ Найдено ${sharedEdges.length} общих участков с параллельными линиями`);
   }
 
+  // Проверка корректности позиций Воронежа и Тамбова
+  if(pos["Воронеж"] && pos["Тамбов"]){
+    const yDiff = Math.abs(pos["Воронеж"].y - pos["Тамбов"].y);
+    if(yDiff < 1){
+      messages.push(`✓ Воронеж и Тамбов находятся на одном уровне по Y (разница: ${yDiff.toFixed(1)})`);
+    } else {
+      messages.push(`⚠ Воронеж и Тамбов НЕ на одном уровне: Y_Воронеж=${pos["Воронеж"].y}, Y_Тамбов=${pos["Тамбов"].y}, разница=${yDiff.toFixed(1)}`);
+    }
+  }
+
+  // Проверка позиции Перми относительно Казани
+  if(pos["Пермь"] && pos["Казань"]){
+    const xDiff = pos["Пермь"].x - pos["Казань"].x;
+    const yDiff = pos["Пермь"].y - pos["Казань"].y;
+    messages.push(`✓ Пермь относительно Казани: X+${xDiff.toFixed(0)}, Y${yDiff > 0 ? '+' : ''}${yDiff.toFixed(0)} (${yDiff < 0 ? 'выше' : 'ниже'} Казани)`);
+  }
+
   return {messages, errors};
 }
 
 export default function CompleteMetroMap(){
-  const [scale, setScale] = useState(0.8);
-  const [translateX, setTranslateX] = useState(200);
-  const [translateY, setTranslateY] = useState(100);
+  const [scale, setScale] = useState(0.6);
+  const [translateX, setTranslateX] = useState(300);
+  const [translateY, setTranslateY] = useState(150);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({x:0, y:0});
   const [showLegend, setShowLegend] = useState(true);
   
   const svgRef = useRef<SVGSVGElement>(null);
-  const containerWidth = 1600, containerHeight = 1000;
+  const containerWidth = 1200, containerHeight = 800;
   
   // Определяем начальные позиции для разных маршрутов
   const origins = {
@@ -253,11 +279,11 @@ export default function CompleteMetroMap(){
   
   const pos = useMemo(()=>computePositions(LINES, MOVES_BY_ID, origins), []);
   const stations = useMemo(()=>Array.from(new Set(LINES.flatMap(l=>l.stations))), []);
-  const labels = useMemo(()=>placeLabels(stations, pos, 14, scale), [pos, scale]);
+  const labels = useMemo(()=>placeLabels(stations, pos, 12, scale), [pos, scale]);
 
   // Управление зумом
   const handleZoom = useCallback((delta: number, centerX?: number, centerY?: number) => {
-    const newScale = Math.max(0.3, Math.min(4, scale + delta));
+    const newScale = Math.max(0.2, Math.min(3, scale + delta));
     if (newScale === scale) return;
     
     const zoomCenterX = centerX ?? containerWidth / 2;
@@ -280,7 +306,7 @@ export default function CompleteMetroMap(){
     
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
     
     handleZoom(delta, mouseX, mouseY);
   }, [handleZoom]);
@@ -308,39 +334,39 @@ export default function CompleteMetroMap(){
 
   // Сброс вида
   const resetView = useCallback(() => {
-    setScale(0.8);
-    setTranslateX(200);
-    setTranslateY(100);
+    setScale(0.6);
+    setTranslateX(300);
+    setTranslateY(150);
   }, []);
 
   // Самодиагностика
   const {messages, errors} = runSelfTests(pos);
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 text-gray-900">
+    <div className="w-full bg-gray-50 text-gray-900 min-h-screen">
       {/* Шапка */}
-      <div className="bg-white shadow-sm border-b p-4">
-        <div className="flex justify-between items-start max-w-full">
+      <div className="bg-white shadow-sm border-b p-3">
+        <div className="flex justify-between items-start">
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-blue-900 mb-2">
-              Интерактивная карта железнодорожных маршрутов России
+            <h1 className="text-2xl font-bold text-blue-900 mb-1">
+              Обновленная карта железнодорожных маршрутов России
             </h1>
             <p className="text-sm text-gray-600 mb-2">
-              Полная схема всех маршрутов со строгими углами 90°/45°. Используйте мышь для навигации: колесико для зума, перетаскивание для движения по карте.
+              Воронеж и Тамбов опущены на 1 уровень и выровнены по Y. Пермь сдвинута вправо над Казанью.
             </p>
             
             {/* Панель управления */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1">
                 <button 
-                  onClick={() => handleZoom(0.2)} 
-                  className="w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-colors"
+                  onClick={() => handleZoom(0.15)} 
+                  className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg transition-colors"
                 >
                   +
                 </button>
                 <button 
-                  onClick={() => handleZoom(-0.2)} 
-                  className="w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-colors"
+                  onClick={() => handleZoom(-0.15)} 
+                  className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg transition-colors"
                 >
                   −
                 </button>
@@ -348,20 +374,20 @@ export default function CompleteMetroMap(){
               
               <button 
                 onClick={resetView}
-                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
+                className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded transition-colors"
               >
-                Сброс вида
+                Сброс
               </button>
               
               <button 
                 onClick={() => setShowLegend(!showLegend)}
-                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors"
+                className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition-colors"
               >
-                {showLegend ? 'Скрыть легенду' : 'Показать легенду'}
+                {showLegend ? 'Скрыть легенду' : 'Легенду'}
               </button>
               
-              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg">
-                Масштаб: <span className="font-medium">{Math.round(scale * 100)}%</span>
+              <div className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                {Math.round(scale * 100)}%
               </div>
             </div>
           </div>
@@ -371,67 +397,87 @@ export default function CompleteMetroMap(){
       <div className="flex">
         {/* Легенда */}
         {showLegend && (
-          <div className="w-80 bg-white shadow-sm border-r p-4 h-screen overflow-y-auto">
-            <h3 className="font-bold text-lg mb-4 text-gray-800">Маршруты</h3>
+          <div className="w-72 bg-white shadow-sm border-r p-3 h-screen overflow-y-auto">
+            <h3 className="font-bold text-base mb-3 text-gray-800">Маршруты</h3>
             
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="text-sm font-semibold text-blue-800 border-b pb-1">Старые маршруты:</div>
               {LINES.slice(0, 3).map(line => (
-                <div key={line.id} className="flex items-start gap-3 text-sm">
+                <div key={line.id} className="flex items-start gap-2 text-sm">
                   <div 
-                    className="w-4 h-3 rounded mt-1 flex-shrink-0" 
+                    className="w-3 h-3 rounded mt-0.5 flex-shrink-0" 
                     style={{backgroundColor: line.color}}
                   ></div>
                   <div>
-                    <div className="font-medium">{line.name}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {line.stations.join(' → ')}
-                    </div>
+                    <div className="font-medium text-xs">{line.name}</div>
                   </div>
                 </div>
               ))}
               
-              <div className="text-sm font-semibold text-green-800 border-b pb-1 mt-6">Новые маршруты:</div>
+              <div className="text-sm font-semibold text-green-800 border-b pb-1 mt-4">Новые маршруты:</div>
               {LINES.slice(3).map(line => (
-                <div key={line.id} className="flex items-start gap-3 text-sm">
+                <div key={line.id} className="flex items-start gap-2 text-sm">
                   <div 
-                    className="w-4 h-3 rounded mt-1 flex-shrink-0" 
+                    className="w-3 h-3 rounded mt-0.5 flex-shrink-0" 
                     style={{backgroundColor: line.color}}
                   ></div>
                   <div>
-                    <div className="font-medium">{line.name}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {line.stations.join(' → ')}
-                    </div>
+                    <div className="font-medium text-xs">{line.name}</div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Самодиагностика */}
-            <div className="mt-6">
-              <h4 className="font-semibold text-gray-700 mb-3">Статус системы</h4>
+            {/* Статус */}
+            <div className="mt-4">
+              <h4 className="font-semibold text-gray-700 mb-2 text-sm">Статус системы</h4>
               {errors.length > 0 ? (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
-                  <div className="font-semibold text-red-800 mb-2">Ошибки:</div>
+                <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
+                  <div className="font-semibold text-red-800 mb-1">Ошибки:</div>
                   <ul className="space-y-1 text-red-700">
                     {errors.map((e,i)=>(<li key={i}>• {e}</li>))}
                   </ul>
                 </div>
               ) : (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm">
-                  <div className="font-semibold text-green-800 mb-2">Все проверки пройдены:</div>
+                <div className="p-2 bg-green-50 border border-green-200 rounded text-xs">
+                  <div className="font-semibold text-green-800 mb-1">Проверки пройдены:</div>
                   <ul className="space-y-1 text-green-700">
-                    {messages.slice(0, 5).map((m,i)=>(<li key={i}>• {m}</li>))}
-                    {messages.length > 5 && <li className="text-green-600">• и ещё {messages.length - 5} проверок...</li>}
+                    {messages.slice(0, 4).map((m,i)=>(<li key={i}>• {m}</li>))}
+                    {messages.length > 4 && <li className="text-green-600">• +{messages.length - 4} других</li>}
                   </ul>
                 </div>
               )}
             </div>
+
+            {/* Проверка координат */}
+            <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs max-h-64 overflow-y-auto">
+              <div className="font-semibold text-blue-800 mb-2">Координаты всех городов и станций:</div>
+              <div className="text-blue-700 space-y-0.5 font-mono text-xs">
+                {stations.sort().map(name => (
+                  <div key={name} className="flex justify-between">
+                    <span className="font-medium">{name}:</span>
+                    <span>X={pos[name]?.x?.toFixed(0) || 'N/A'}, Y={pos[name]?.y?.toFixed(0) || 'N/A'}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 pt-2 border-t border-blue-300">
+                <div className="font-semibold text-blue-800 mb-1">Проверка выравнивания:</div>
+                {pos["Воронеж"] && pos["Тамбов"] && (
+                  <div className={Math.abs(pos["Воронеж"].y - pos["Тамбов"].y) < 1 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+                    Воронеж-Тамбов Y разница: {Math.abs(pos["Воронеж"].y - pos["Тамбов"].y).toFixed(1)}px
+                  </div>
+                )}
+                {pos["Пермь"] && pos["Казань"] && (
+                  <div className="text-gray-600">
+                    Пермь над Казанью: ΔX={Math.abs(pos["Пермь"].x - pos["Казань"].x).toFixed(0)}, ΔY={Math.abs(pos["Пермь"].y - pos["Казань"].y).toFixed(0)}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Основная карта */}
+        {/* Карта */}
         <div className="flex-1 overflow-hidden bg-white relative">
           <svg 
             ref={svgRef}
@@ -445,16 +491,11 @@ export default function CompleteMetroMap(){
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
             className="select-none w-full h-screen"
           >
-            {/* Фон с сеткой */}
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f0f0f0" strokeWidth="1"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
+            {/* Фон */}
+            <rect width="100%" height="100%" fill="#fafafa" />
 
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              {/* Линии маршрутов (с параллельными сегментами для общих участков) */}
+              {/* Линии маршрутов */}
               {(() => {
                 const allEdges = LINES.flatMap(l => buildEdges(l, pos));
                 const groups = new Map<string, Array<{a:string;b:string;lineId:string}>>();
@@ -465,7 +506,7 @@ export default function CompleteMetroMap(){
                   groups.get(k)!.push(e);
                 });
 
-                const offsetStep = 16; // расстояние между параллельными линиями
+                const offsetStep = 12;
                 const elems: JSX.Element[] = [];
                 
                 groups.forEach((arr, k)=>{
@@ -485,7 +526,7 @@ export default function CompleteMetroMap(){
                         key={`${k}_${e.lineId}`} 
                         x1={x1} y1={y1} x2={x2} y2={y2} 
                         stroke={color} 
-                        strokeWidth={10} 
+                        strokeWidth={8} 
                         strokeLinecap="round" 
                         strokeLinejoin="round"
                         opacity={0.9}
@@ -504,7 +545,7 @@ export default function CompleteMetroMap(){
                   <circle 
                     key={name} 
                     cx={p.x} cy={p.y} 
-                    r={isHub ? 8 : 6} 
+                    r={isHub ? 7 : 5} 
                     fill="#fff" 
                     stroke={isHub ? "#1e40af" : "#374151"} 
                     strokeWidth={isHub ? 3 : 2}
@@ -517,35 +558,33 @@ export default function CompleteMetroMap(){
                 const p = pos[name];
                 const lab = labels[name];
                 const isHub = HUBS.has(name);
-                const {w,h} = estimateTextSize(name, 15);
+                const {w,h} = estimateTextSize(name, 13);
                 
                 return (
                   <g key={`${name}_lab`}>
                     {isHub && (
                       <rect 
-                        x={lab.anchor==='start'? lab.x-6 : lab.x-w-6} 
-                        y={lab.y-h-3} 
-                        width={w+12} 
-                        height={h+6} 
+                        x={lab.anchor==='start'? lab.x-4 : lab.x-w-4} 
+                        y={lab.y-h-2} 
+                        width={w+8} 
+                        height={h+4} 
                         fill="rgba(255,255,255,0.95)" 
                         stroke="#3b82f6" 
-                        strokeWidth={2} 
-                        rx={6} 
-                        ry={6}
-                        filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
+                        strokeWidth={1.5} 
+                        rx={4} 
+                        ry={4}
                       />
                     )}
                     <text 
                       x={lab.x} 
                       y={lab.y} 
-                      fontSize={15} 
+                      fontSize={13} 
                       textAnchor={lab.anchor} 
                       stroke="#fff" 
-                      strokeWidth={4} 
+                      strokeWidth={3} 
                       paintOrder="stroke" 
                       fill={isHub ? "#1e40af" : "#111"}
                       fontWeight={isHub ? 'bold' : 'normal'}
-                      style={{filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.3))"}}
                     >
                       {name}
                     </text>
@@ -553,8 +592,7 @@ export default function CompleteMetroMap(){
                 );
               })}
 
-              {/* Дополнительные элементы для красоты */}
-              {/* Стрелки направления на длинных участках */}
+              {/* Стрелки направления */}
               {LINES.map(line => {
                 const edges = buildEdges(line, pos);
                 return edges.map((edge, idx) => {
@@ -565,16 +603,15 @@ export default function CompleteMetroMap(){
                   const dy = B.y - A.y;
                   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
                   
-                  // Показываем стрелки только на длинных участках
                   const distance = Math.hypot(dx, dy);
-                  if (distance < GRID * 1.5) return null;
+                  if (distance < GRID * 1.3) return null;
                   
                   return (
                     <g key={`arrow_${edge.lineId}_${idx}`} transform={`translate(${midX}, ${midY}) rotate(${angle})`}>
                       <polygon 
-                        points="-8,-4 8,0 -8,4" 
+                        points="-6,-3 6,0 -6,3" 
                         fill={line.color} 
-                        opacity={0.7}
+                        opacity={0.8}
                         stroke="#fff"
                         strokeWidth={1}
                       />
@@ -585,12 +622,11 @@ export default function CompleteMetroMap(){
             </g>
           </svg>
 
-          {/* Мини-карта в углу */}
-          <div className="absolute top-4 right-4 w-48 h-32 bg-white border-2 border-gray-300 rounded-lg shadow-lg overflow-hidden">
-            <svg width="100%" height="100%" viewBox="0 0 1600 1000">
+          {/* Мини-карта */}
+          <div className="absolute top-3 right-3 w-40 h-24 bg-white border border-gray-300 rounded shadow-lg overflow-hidden">
+            <svg width="100%" height="100%" viewBox="0 0 1400 900">
               <rect width="100%" height="100%" fill="#f8fafc" />
               
-              {/* Упрощенные линии */}
               {LINES.map(line => {
                 const edges = buildEdges(line, pos);
                 return edges.map((edge, idx) => {
@@ -600,14 +636,13 @@ export default function CompleteMetroMap(){
                       key={`mini_${line.id}_${idx}`}
                       x1={A.x} y1={A.y} x2={B.x} y2={B.y} 
                       stroke={line.color} 
-                      strokeWidth={3} 
+                      strokeWidth={2} 
                       opacity={0.8}
                     />
                   );
                 });
               })}
               
-              {/* Видимая область */}
               <rect 
                 x={-translateX / scale} 
                 y={-translateY / scale} 
@@ -615,29 +650,28 @@ export default function CompleteMetroMap(){
                 height={containerHeight / scale} 
                 fill="none" 
                 stroke="#ef4444" 
-                strokeWidth={4} 
+                strokeWidth={3} 
                 opacity={0.8}
-                strokeDasharray="10,5"
+                strokeDasharray="8,4"
               />
             </svg>
-            <div className="absolute bottom-1 left-1 text-xs text-gray-500 bg-white px-1 rounded">
+            <div className="absolute bottom-0 left-1 text-xs text-gray-500 bg-white px-1">
               Обзор
             </div>
           </div>
 
-          {/* Информационная панель */}
-          <div className="absolute bottom-4 left-4 bg-white border border-gray-300 rounded-lg shadow-lg p-3 max-w-sm">
-            <div className="text-sm">
-              <div className="font-semibold text-gray-800 mb-2">Навигация:</div>
-              <div className="text-gray-600 space-y-1">
-                <div>🖱️ Перетаскивание мышью — движение по карте</div>
-                <div>🎡 Колесико мыши — приближение/отдаление</div>
-                <div>➕➖ Кнопки — точный контроль зума</div>
-                <div>🔄 Сброс вида — возврат к исходному масштабу</div>
+          {/* Инфо-панель */}
+          <div className="absolute bottom-3 left-3 bg-white border border-gray-300 rounded shadow-lg p-2 max-w-xs">
+            <div className="text-xs">
+              <div className="font-semibold text-gray-800 mb-1">Навигация:</div>
+              <div className="text-gray-600 space-y-0.5">
+                <div>🖱️ Перетаскивание — движение</div>
+                <div>🎡 Колесико — зум</div>
+                <div>➕➖ Кнопки — точный зум</div>
               </div>
-              <div className="mt-3 pt-2 border-t border-gray-200">
+              <div className="mt-2 pt-1 border-t border-gray-200">
                 <div className="text-xs text-gray-500">
-                  Всего станций: {stations.length} • Маршрутов: {LINES.length}
+                  Станций: {stations.length} • Маршрутов: {LINES.length}
                 </div>
               </div>
             </div>

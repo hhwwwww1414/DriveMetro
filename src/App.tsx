@@ -184,7 +184,7 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   // 3) Ростов → Невинномысск → Минеральные Воды → Нальчик → Владикавказ
   { id:'RST-CAUC', name:'Ростов → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
   // 4) Волгоград → Элиста → Будённовск → Грозный → Махачкала
-  { id:'VLG-ELI-GRZ-MAH', name:'Волгоград → Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Волгоград','Элиста','Будённовск','Грозный','Махачкала']) },
+  { id:'VLG-ELI-GRZ-MAH', name:'Волгоград → Элиста → Будённовск → Грозный → Махачкала', style:'dashed', path: route(['Волгоград','Элиста','Будённовск','Грозный','Махачкала']) },
   // 5) Волгоград → Элиста → Астрахань → Махачкала
   { id:'VLG-ELI-AST-MAH', name:'Волгоград → Элиста → Астрахань → Махачкала', style:'dotted', path: route(['Волгоград','Элиста','Астрахань','Махачкала']) },
   // 6) Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ
@@ -214,9 +214,21 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
 // Удаляем «дыры», чтобы не было undefined-линий
 const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
 
+// Палитра для согласованных голубых веток (MSK→VLG и ответвления от Волгограда)
+const BLUE_BASE = '#2196F3';   // основная (Москва→Волгоград)
+const BLUE_DARK = '#1E88E5';   // темнее (Волгоград→Элиста→Будённовск→Грозный→Махачкала)
+const BLUE_LIGHT = '#64B5F6';  // светлее / альтернативная (Волгоград→Элиста→Астрахань→Махачкала)
+
+const COLOR_OVERRIDES: Record<string,string> = {
+  'MSK-VLG': BLUE_BASE,
+  'VLG-ELI-GRZ-MAH': BLUE_DARK,
+  'VLG-ELI-AST-MAH': BLUE_LIGHT,
+  'TLT-VLG': '#7c3aed', // фиксированный фиолетовый
+};
+
 const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>({
   ...l,
-  color: l.id==='TLT-VLG' ? '#7c3aed' : distinctColor(i)
+  color: COLOR_OVERRIDES[l.id] ?? distinctColor(i)
 }));
 
 // --- Построение общих отрезков ---

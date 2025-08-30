@@ -239,10 +239,10 @@ const COLOR_OVERRIDES: Record<string,string> = {
   // Жёлтый для объединённой ветки Москва → Владикавказ через Воронеж/Ростов/КМВ
   'MSK-RST': '#F6C026',
 
-  // Оранжевый транзит и ответвления
-  'NSK-RST-SOUTH': '#F97316',
-  'SRT-VRN-RST': '#F97316',
-  'KRD-RST': '#F97316'
+  // ЯРКО-СЕРЫЙ транзит и ответвления (по запросу)
+  'NSK-RST-SOUTH': '#BDBDBD',
+  'SRT-VRN-RST': '#BDBDBD',
+  'KRD-RST': '#BDBDBD'
 };
 
 const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>({

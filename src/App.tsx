@@ -135,8 +135,6 @@ function placeLabels(names:string[], pos:Record<string,XY>, fontSize=13, scale=1
 
 // Helpers
 const distinctColor = (i:number)=>`hsl(${(i*137.508)%360}, 72%, 45%)`;
-const snap = (v:number, step:number)=> Math.round(v/step)*step;
-
 function route(path: string[]): string[]{
   const out: string[] = [];
   for(const name of path){ if(!BASE_POS[name]) continue; if(REMOVED_FROM_ROUTES.has(name)) continue; if(out.length===0 || out[out.length-1]!==name) out.push(name); }
@@ -255,12 +253,6 @@ export default function MetroBranches(){
   const [translateY, setTranslateY] = useState(150);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStation, setDragStation] = useState<string|null>(null);
-  const [selected, setSelected] = useState<string|null>(null);
-
-  const [halfSnap, setHalfSnap] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
-  const [editMode, setEditMode] = useState(true);
 
   // Видимость веток
   const [visible, setVisible] = useState<Record<string, boolean>>(()=>{
@@ -300,10 +292,6 @@ export default function MetroBranches(){
   const labels = useMemo(()=>placeLabels(stations, pos, 13, scale), [pos, scale]);
   const containerWidth = 1200, containerHeight = 800;
 
-  const screenToWorld = useCallback((sx:number, sy:number)=>{
-    return { x: (sx - translateX)/scale, y: (sy - translateY)/scale };
-  },[scale, translateX, translateY]);
-
   const handleZoom = useCallback((delta: number, centerX?: number, centerY?: number) => {
     const newScale = Math.max(0.2, Math.min(3, scale + delta)); if (newScale === scale) return;
     const rect = svgRef.current?.getBoundingClientRect();
@@ -322,37 +310,18 @@ export default function MetroBranches(){
     const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top; const delta = e.deltaY > 0 ? -0.1 : 0.1; handleZoom(delta, mouseX, mouseY);
   }, [handleZoom]);
 
-  const pickStationAt = useCallback((sx:number, sy:number)=>{
-    const {x,y} = screenToWorld(sx, sy);
-    let best: {name:string; d:number} | null = null;
-    for(const name of stations){ const p = pos[name]; const d = Math.hypot(p.x-x, p.y-y); if(best==null || d<best.d) best={name, d}; }
-    if(best && best.d <= 12) return best.name;
-    return null;
-  },[pos, screenToWorld]);
-
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if(editMode){
-      const picked = pickStationAt(e.clientX, e.clientY);
-      if(picked){ setSelected(picked); setDragStation(picked); return; }
-    }
     setIsDragging(true);
     setLastMouse({x: e.clientX, y: e.clientY});
-  }, [editMode, pickStationAt]);
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if(dragStation){
-      const {x,y} = screenToWorld(e.clientX, e.clientY);
-      const step = halfSnap ? GRID/2 : GRID;
-      const nx = snap(x, step); const ny = snap(y, step);
-      setPos(prev=>{ const next={...prev, [dragStation]: {x:nx, y:ny} }; saveOverrides(next); return next; });
-      return;
-    }
     if (!isDragging) return;
     const dx = e.clientX - lastMouse.x; const dy = e.clientY - lastMouse.y;
     setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x: e.clientX, y: e.clientY});
-  }, [dragStation, halfSnap, isDragging, lastMouse, screenToWorld, saveOverrides]);
+  }, [isDragging, lastMouse]);
 
-  const handleMouseUp = useCallback(() => { setIsDragging(false); setDragStation(null); }, []);
+  const handleMouseUp = useCallback(() => { setIsDragging(false); }, []);
 
   const resetView = useCallback(() => { setScale(0.6); setTranslateX(300); setTranslateY(150); }, []);
 
@@ -452,17 +421,6 @@ export default function MetroBranches(){
           <button onClick={() => handleZoom(0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">+</button>
           <button onClick={() => handleZoom(-0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">−</button>
           <button onClick={resetView} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded">Сброс вида</button>
-
-          <label className="flex items-center gap-1 text-sm ml-2">
-            <input type="checkbox" checked={editMode} onChange={e=>setEditMode(e.target.checked)} /> Режим правки
-          </label>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={halfSnap} onChange={e=>setHalfSnap(e.target.checked)} /> Привязка GRID/2
-          </label>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={showGrid} onChange={e=>setShowGrid(e.target.checked)} /> Показать сетку
-          </label>
-
           <button onClick={exportJSON} className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded">Экспорт</button>
           <button onClick={importJSON} className="px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white text-sm rounded">Импорт</button>
           <button onClick={resetOverrides} className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded">Сброс правок</button>
@@ -496,7 +454,6 @@ export default function MetroBranches(){
             )}
           </div>
 
-          <PointEditor stations={stations} pos={pos} setPos={setPos} saveOverrides={saveOverrides} halfSnap={halfSnap} />
         </div>
 
         {/* Карта */}
@@ -506,19 +463,19 @@ export default function MetroBranches(){
             width={containerWidth}
             height={containerHeight}
             onWheel={handleWheel}
-            onMouseDown={(e)=>{ if((e.target as HTMLElement).tagName==='svg') setSelected(null); handleMouseDown(e); }}
+            onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{ cursor: dragStation? 'grabbing' : (isDragging ? 'grabbing' : 'grab') }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
             className="select-none w-full h-screen"
           >
             <rect width="100%" height="100%" fill="#fafafa" />
 
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              {showGrid && <Grid />}
+              <Grid />
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
-              <StationsAndLabels stations={stations} pos={pos} labels={labels} editMode={editMode} selected={selected} setSelected={setSelected} />
+              <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
         </div>
@@ -555,14 +512,13 @@ function RouteLines({lines, pos, allLines}:{lines:LineDef[]; pos:Record<string,X
   return <>{elems}</>;
 }
 
-function StationsAndLabels({stations, pos, labels, editMode, selected, setSelected}:{stations:string[]; pos:Record<string,XY>; labels:Record<string,any>; editMode:boolean; selected:string|null; setSelected:(s:string|null)=>void;}){
+function StationsAndLabels({stations, pos, labels}:{stations:string[]; pos:Record<string,XY>; labels:Record<string,any>}){
   return <>
     {stations.map(name=>{
-      const p = pos[name]; const isSelected = selected===name;
+      const p = pos[name];
       return (
         <g key={name}>
-          {isSelected && (<circle cx={p.x} cy={p.y} r={10} fill="none" stroke="#22c55e" strokeWidth={2} strokeDasharray="4 4" />)}
-          <circle cx={p.x} cy={p.y} r={5} fill="#fff" stroke={isSelected? "#22c55e" : "#111"} strokeWidth={isSelected? 3 : 2} />
+          <circle cx={p.x} cy={p.y} r={5} fill="#fff" stroke="#111" strokeWidth={2} />
         </g>
       );
     })}
@@ -570,42 +526,13 @@ function StationsAndLabels({stations, pos, labels, editMode, selected, setSelect
     {stations.map(name=>{
       const p = pos[name]; const lab = labels[name]; const {w,h} = estimateTextSize(name, 13);
       return (
-        <g key={`${name}_lab`} onMouseDown={(e)=>{ if(!editMode) return; setSelected(name); e.stopPropagation(); }}>
+        <g key={`${name}_lab`}>
           <rect x={lab.anchor==='start'? lab.x-4 : lab.x-w-4} y={lab.y-h-2} width={w+8} height={h+4} fill="rgba(255,255,255,0.95)" stroke="#e5e7eb" strokeWidth={1} rx={4} ry={4} />
           <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
         </g>
       );
     })}
   </>;
-}
-
-function PointEditor({stations, pos, setPos, saveOverrides, halfSnap}:{stations:string[]; pos:Record<string,XY>; setPos:React.Dispatch<React.SetStateAction<Record<string,XY>>>; saveOverrides:(n:Record<string,XY>)=>void; halfSnap:boolean;}){
-  const [selected, setSelected] = useState<string>('');
-  return (
-    <div className="mt-4 border-t pt-3">
-      <h4 className="font-semibold text-gray-800 text-sm mb-2">Настройка точки</h4>
-      <select value={selected} onChange={e=>setSelected(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
-        <option value="">— не выбрано —</option>
-        {stations.sort().map(n=> (<option key={n} value={n}>{n}</option>))}
-      </select>
-      {selected && (
-        <div className="mt-2 space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <label className="w-16 text-gray-600">X</label>
-            <input type="number" className="flex-1 border rounded px-2 py-1" value={pos[selected].x} onChange={e=>{ const v=Number(e.target.value); setPos(prev=>{ const next={...prev, [selected]:{...prev[selected], x:v}}; saveOverrides(next); return next; }); }} />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="w-16 text-gray-600">Y</label>
-            <input type="number" className="flex-1 border rounded px-2 py-1" value={pos[selected].y} onChange={e=>{ const v=Number(e.target.value); setPos(prev=>{ const next={...prev, [selected]:{...prev[selected], y:v}}; saveOverrides(next); return next; }); }} />
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="px-2 py-1 bg-gray-200 rounded" onClick={()=>{ const step = halfSnap? GRID/2: GRID; setPos(prev=>{ const p = prev[selected!]; const nx=Math.round(p.x/step)*step, ny=Math.round(p.y/step)*step; const next={...prev, [selected!]:{x:nx,y:ny}}; saveOverrides(next); return next; }); }}>Снап к сетке</button>
-            <button className="px-2 py-1 bg-gray-200 rounded" onClick={()=>{ setPos(prev=>{ const next={...prev, [selected!]: {...BASE_POS[selected!]}}; saveOverrides(next); return next; }); }}>Сбросить к эталону</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function LegendControls({LINES, visible, toggleLine, soloLine, showAll, hideAll, invertAll}:{LINES:LineDef[]; visible:Record<string,boolean>; toggleLine:(id:string)=>void; soloLine:(id:string)=>void; showAll:()=>void; hideAll:()=>void; invertAll:()=>void;}){

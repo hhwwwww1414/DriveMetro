@@ -170,7 +170,7 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', path: route(['Томск','Кемерово','Новокузнецк']) },
   { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', path: route(['Красноярск','Абакан','Кызыл']) },
   { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', path: route(['Сковородино','Якутск','Магадан']) },
-  { id:'MSK-ORSK', name:'Москва → Орск (через Пензу)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Орск']) }
+  { id:'MSK-ORSK', name:'Москва → Орск (через Пензу)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) }
 ];
 
 const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
@@ -194,7 +194,7 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'MSK-VLG': '#1A73E8',
   'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
   'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
-  'OMSK-NCH-IZH-GRAY': '#BDBDBD',
+  'OMSK-NCH-IZH-GRAY': '#7E57C2',
   
   'MSK-MUR-SPB': '#00B7FF',
   'MSK-MUR-YAR': '#00B7FF',

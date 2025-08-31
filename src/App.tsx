@@ -186,8 +186,8 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'OMSK-NCH-IZH': '#7ED957',
   'OMSK-NCH-UFA': '#7ED957',
   'OMSK-VVO-SALAD': '#7ED957',
-  'MSK-RSTDN': '#FF8C00',
-  'RST-KRD': '#FF8C00',
+  'MSK-RSTDN': '#FF7518',
+  'RST-KRD': '#FF7518',
 
   'SRG-EKB': '#009A49',
   'EKB-MSK-KIR': '#009A49',

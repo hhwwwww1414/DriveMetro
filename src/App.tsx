@@ -114,6 +114,8 @@ function placeLabels(names:string[], pos:Record<string,XY>, fontSize=13, scale=1
   return placed;
 }
 
+const distinctColor = (i:number)=>`hsl(${(i*137.508)%360}, 72%, 45%)`;
+
 function route(path:string[]):string[]{
   const out:string[]=[];
   for(const name of path){ if(!BASE_POS[name]) continue; if(REMOVED_FROM_ROUTES.has(name)) continue; if(out.length===0||out[out.length-1]!==name) out.push(name); }
@@ -121,108 +123,114 @@ function route(path:string[]):string[]{
 }
 
 function buildEdgesFromPath(path:string[]):Array<{a:string;b:string}>{
-  const edges:Array<{a:string;b:string}>=[];
+  const edges:Array<{a:string;b:string}> = [];
   for(let i=0;i<path.length-1;i++){ const a=path[i], b=path[i+1]; if(a!==b) edges.push({a,b}); }
   return edges;
 }
 
-// --- Коридоры ---
-type Corridor = {
-  id: string;
-  name: string;
-  color: string;
-  trunk: string[];
-  variants: { id:string; name:string; style:LineStyle; path:string[] }[];
-  feeders?: { id:string; name:string; path:string[]; style?:LineStyle }[];
-};
+// --- Ветки ---
+const RAW_LINES: Omit<LineDef,'color'>[] = [
+  // Основные коридоры
+  { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', path: route(['Москва','Тамбов','Волгоград','Элиста']) },
+  { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
+  { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
 
-function compileCorridorsToLines(corridors:Corridor[]){
-  const lines:LineDef[]=[]; const groups:Record<string,string[]>={};
-  corridors.forEach(c=>{
-    const ids:string[]=[];
-    if(c.trunk.length>=2){ const id=`${c.id}-trunk`; lines.push({id,name:c.name,style:'solid',color:c.color,path:route(c.trunk)}); ids.push(id); }
-    c.variants.forEach(v=>{ const id=`${c.id}-var-${v.id}`; lines.push({id,name:v.name,style:v.style,color:c.color,path:route(v.path)}); ids.push(id); });
-    c.feeders?.forEach(f=>{ const id=`${c.id}-fd-${f.id}`; lines.push({id,name:f.name,style:f.style??'solid',color:c.color,path:route(f.path)}); ids.push(id); });
-    groups[c.id]=ids;
-  });
-  return {lines, groups};
-}
+  // Южные / Крым
+  { id:'RST-KRD-CRIMEA', name:'Ростов → Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Ростов-на-Дону','Краснодар','Керчь','Симферополь','Севастополь']) },
+  { id:'RST-MAR-CRIMEA', name:'Волгоград → Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
+  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
+  { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
+  { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
+  { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
+  { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
+  { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
 
-const CORRIDORS:Corridor[]=[
-  {
-    id:'north-gas',
-    name:'Сургут → Москва',
-    color:'#009A49',
-    trunk:['Сургут','Тюмень','Екатеринбург','Пермь'],
-    variants:[
-      {id:'kir',name:'через Киров',style:'dashed',path:['Пермь','Киров','Ярославль','Москва']},
-      {id:'kaz',name:'через Казань',style:'dotted',path:['Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']},
-    ],
-    feeders:[
-      {id:'nurg',name:'Новый Уренгой → Сургут',path:['Новый Уренгой','Сургут']},
-      {id:'khm',name:'Ханты-Мансийск → Сургут',path:['Ханты-Мансийск','Сургут']},
-      {id:'nvv',name:'Нижневартовск → Сургут',path:['Нижневартовск','Сургут']},
-    ]
-  },
-  {
-    id:'north',
-    name:'Москва → Мурманск',
-    color:'#00B7FF',
-    trunk:['Медвежьегорск','Мурманск'],
-    variants:[
-      {id:'spb',name:'через Санкт-Петербург',style:'dashed',path:['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск']},
-      {id:'yar',name:'через Ярославль',style:'dotted',path:['Москва','Ярославль','Вологда','Медвежьегорск']},
-    ]
-  },
-  {
-    id:'elista',
-    name:'Москва → Элиста',
-    color:'#F40009',
-    trunk:['Москва','Тамбов','Волгоград','Элиста'],
-    variants:[
-      {id:'vlk',name:'на Владикавказ',style:'solid',path:['Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']},
-      {id:'grz',name:'через Будённовск',style:'solid',path:['Элиста','Будённовск','Грозный','Махачкала']},
-      {id:'ast',name:'через Астрахань',style:'solid',path:['Элиста','Астрахань','Махачкала']},
-    ]
-  },
-  {
-    id:'east',
-    name:'Омск → Владивосток',
-    color:'#7ED957',
-    trunk:['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток'],
-    variants:[],
-  },
-  {
-    id:'south-coast',
-    name:'Ростов → Крым',
-    color:'#BDBDBD',
-    trunk:['Симферополь','Севастополь'],
-    variants:[
-      {id:'mariupol',name:'через Мариуполь',style:'dashed',path:['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь']},
-      {id:'krasnodar',name:'через Краснодар',style:'dotted',path:['Ростов-на-Дону','Краснодар','Керчь','Симферополь']},
-    ],
-    feeders:[
-      {id:'vlg-rst',name:'Волгоград → Ростов',path:['Волгоград','Ростов-на-Дону']},
-      {id:'srt-vrn-rst',name:'Саратов → Ростов',style:'dashed',path:['Саратов','Воронеж','Ростов-на-Дону']},
-    ]
-  },
-  {
-    id:'siberia',
-    name:'Сибирские ответвления',
-    color:'#8B4513',
-    trunk:[],
-    variants:[
-      {id:'nsk-galt',name:'Новосибирск → Горно-Алтайск',style:'solid',path:['Новосибирск','Барнаул','Бийск','Горно-Алтайск']},
-      {id:'tom-novk',name:'Томск → Новокузнецк',style:'solid',path:['Томск','Кемерово','Новокузнецк']},
-      {id:'krs-kyz',name:'Красноярск → Кызыл',style:'solid',path:['Красноярск','Абакан','Кызыл']},
-      {id:'cht-mag',name:'Сковородино → Магадан',style:'solid',path:['Сковородино','Якутск','Магадан']},
-    ]
-  }
+  // Восточный коридор и салатовые к НЧ
+  { id:'OMSK-VVO', name:'Омск → Владивосток (восточный коридор)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (дубль, серый)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', path: route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']) },
+  { id:'MSK-NCH-SALAD', name:'Москва → Набережные Челны (через Владимир / Нижний Новгород / Чебоксары / Казань)', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Набережные Челны']) },
+  { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны']) },
+  { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', path: route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']) },
+
+  // Тёмно-коричневый северный блок
+  { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', path: route(['Сургут','Тюмень','Екатеринбург']) },
+  { id:'EKB-MSK-KIR', name:'Екатеринбург → Москва (через Пермь / Киров / Ярославль)', style:'dashed', path: route(['Екатеринбург','Пермь','Киров','Ярославль','Москва']) },
+  { id:'EKB-MSK-IZH', name:'Екатеринбург → Москва (через Пермь / Ижевск / Казань / Чебоксары / Нижний Новгород / Владимир)', style:'dotted', path: route(['Екатеринбург','Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']) },
+
+  // Север
+  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
+  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
+
+  // Северные/Сибирские короткие связи
+  { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', path: route(['Новый Уренгой','Сургут']) },
+  { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', path: route(['Ханты-Мансийск','Сургут']) },
+  { id:'NVV-SRG', name:'Нижневартовск → Сургут', style:'solid', path: route(['Нижневартовск','Сургут']) },
+  { id:'NSK-GALT', name:'Новосибирск → Горно-Алтайск (через Барнаул / Бийск)', style:'solid', path: route(['Новосибирск','Барнаул','Бийск','Горно-Алтайск']) },
+  { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', path: route(['Томск','Кемерово','Новокузнецк']) },
+  { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', path: route(['Красноярск','Абакан','Кызыл']) },
+  { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', path: route(['Сковородино','Якутск','Магадан']) }
 ];
 
-const {lines:LINES, groups:CORRIDOR_GROUPS} = compileCorridorsToLines(CORRIDORS);
+const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
 
-function buildEdges(line:LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
+// Цвета
+const COLOR_OVERRIDES: Record<string,string> = {
+  'MSK-NCH-SALAD': '#7ED957',
+  'OMSK-NCH-IZH': '#7ED957',
+  'OMSK-NCH-UFA': '#7ED957',
+  'OMSK-VVO': '#7ED957',
+
+  'SRG-EKB': '#009A49',
+  'EKB-MSK-KIR': '#009A49',
+  'EKB-MSK-IZH': '#009A49',
+  'NRG-SRG': '#009A49',
+  'KHM-SRG': '#009A49',
+  'NVV-SRG': '#009A49',
+
+  'MSK-VLG': '#1A73E8',
+  'MSK-MUR-SPB': '#00B7FF',
+  'MSK-MUR-YAR': '#00B7FF',
+
+  'VLG-ELI-CAUC-PURPLE': '#F40009',
+  'VLG-ELI-GRZ-MAH': '#F40009',
+  'VLG-ELI-AST-MAH': '#F40009',
+  'TLT-VLG-PURPLE': '#F40009',
+  'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
+  'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
+
+  'MSK-RST': '#FF8F1F',
+
+  'SRT-VRN-RST': '#BDBDBD',
+  'RST-KRD-CRIMEA': '#BDBDBD',
+  'RST-MAR-CRIMEA': '#BDBDBD',
+  'OMSK-VVO-GREY': '#BDBDBD',
+  'OMSK-VLG-GREY': '#BDBDBD',
+  'CHT-MAG': '#8B4513',
+  'KRS-KYZ': '#8B4513',
+  'TOM-NOVK': '#8B4513',
+  'NSK-GALT': '#8B4513'
+};
+
+const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>(
+  {
+    ...l,
+    color: COLOR_OVERRIDES[l.id] ?? distinctColor(i)
+  }
+));
+
+// === Коридоры (группировка линий) ===
+type Corridor = { id:string; name:string; color?:string; lineIds:string[] };
+const CORRIDORS: Corridor[] = [
+  { id:'C_NORTH_GREEN', name:'Сургут → Москва (зелёный коридор)', color:'#009A49', lineIds:['SRG-EKB','EKB-MSK-KIR','EKB-MSK-IZH','NRG-SRG','KHM-SRG','NVV-SRG'] },
+  { id:'C_MURMANSK_ICE', name:'Москва → Мурманск (ледяной)', color:'#00B7FF', lineIds:['MSK-MUR-SPB','MSK-MUR-YAR'] },
+  { id:'C_ELISTA_RED', name:'Москва → Элиста → Кавказ/Каспий', color:'#F40009', lineIds:['MSK-VLG','VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH'] },
+  { id:'C_EAST_SALAD', name:'Омск → Владивосток / НЧ (салатовый)', color:'#7ED957', lineIds:['OMSK-VVO','MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA'] },
+  { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
+  { id:'C_SOUTH_GREY', name:'Южный / Крымский (серый)', color:'#BDBDBD', lineIds:['RST-MAR-CRIMEA','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','RST-KRD-CRIMEA'] }
+];
+
+function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
 
 export default function MetroBranches(){
   const [scale,setScale]=useState(0.6);
@@ -235,15 +243,25 @@ export default function MetroBranches(){
     const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=true; return v;
   });
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
-
   const activeLines = useMemo(()=> LINES.filter(l=> visible[l.id]!==false), [visible]);
   const toggleLine = useCallback((id:string)=>{ setVisible(v=>({...v,[id]:!(v[id]!==false)})); },[]);
   const toggleCorridor = useCallback((cid:string)=>{
-    setVisible(v=>{ const ids=CORRIDOR_GROUPS[cid]; const allOn=ids.every(id=>v[id]!==false); const next={...v}; ids.forEach(id=>next[id]=!allOn); return next; });
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(v=>{
+      const allOn = ids.every(id=>v[id]!==false);
+      const next={...v};
+      ids.forEach(id=>next[id]=!allOn);
+      return next;
+    });
   },[]);
-  const showAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=true; setVisible(v); },[]);
-  const hideAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=false; setVisible(v); },[]);
-  const invertAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=!(visible[l.id]!==false); setVisible(v); },[visible]);
+  const soloCorridor = useCallback((cid:string)=>{
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(v=>{
+      const next:Record<string,boolean>={};
+      for(const l of LINES){ next[l.id] = ids.includes(l.id); }
+      return next;
+    });
+  },[]);
 
   const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
@@ -288,7 +306,7 @@ export default function MetroBranches(){
       <div className="flex">
         <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
-          <CorridorLegend corridors={CORRIDORS} groups={CORRIDOR_GROUPS} visible={visible} toggleLine={toggleLine} toggleCorridor={toggleCorridor} showAll={showAll} hideAll={hideAll} invertAll={invertAll} />
+          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
           <div className="mt-4 border-t pt-3 text-xs">
             <div className="font-semibold text-gray-800 mb-1">Статус</div>
             {selfTest.errors.length>0 ? (
@@ -356,51 +374,44 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
   </>;
 }
 
-function CorridorLegend({corridors,groups,visible,toggleLine,toggleCorridor,showAll,hideAll,invertAll}:{corridors:Corridor[]; groups:Record<string,string[]>; visible:Record<string,boolean>; toggleLine:(id:string)=>void; toggleCorridor:(id:string)=>void; showAll:()=>void; hideAll:()=>void; invertAll:()=>void;}){
-  const activeCount = Object.keys(visible).filter(id=>visible[id]!==false).length;
-  return (<>
-    <div className="flex items-center gap-2 text-xs mb-2">
-      <button onClick={showAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Показать все</button>
-      <button onClick={hideAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Скрыть все</button>
-      <button onClick={invertAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Инвертировать</button>
-      <div className="ml-auto text-gray-600">Видно: {activeCount}/{Object.keys(visible).length}</div>
-    </div>
-    <div className="space-y-3">
-      {corridors.map(c=>{
-        const ids=groups[c.id]; const allOn=ids.every(id=>visible[id]!==false); const someOn=ids.some(id=>visible[id]!==false);
-        return (
-          <div key={c.id} className="text-sm">
-            <div className="flex items-center gap-2" style={{opacity: someOn?1:0.4}}>
-              <input type="checkbox" checked={allOn} ref={el=>{if(el) el.indeterminate=!allOn && someOn;}} onChange={()=>toggleCorridor(c.id)} />
-              <div className="w-4 h-4" style={{background:c.color}} />
-              <div className="font-medium">{c.name}{c.variants.length>0?` (${c.variants.length} вариант${c.variants.length>1?'ов':''})`:''}</div>
+function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
+  return (
+    <>
+      <div className="flex items-center gap-2 text-xs mb-2">
+        <div className="ml-auto text-gray-600">Коридоров: {CORRIDORS.length}</div>
+      </div>
+      <div className="space-y-3">
+        {CORRIDORS.map(c=>{
+          const ids = c.lineIds.filter(id => LINES.some(l=>l.id===id));
+          const onCount = ids.filter(id => visible[id] !== false).length;
+          const allOn = onCount===ids.length && ids.length>0;
+          const someOn = onCount>0 && onCount<ids.length;
+          return (
+            <div key={c.id} className="border rounded p-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={allOn} ref={el=>{ if(el) (el as HTMLInputElement).indeterminate = someOn; }} onChange={()=>toggleCorridor(c.id)} />
+                <div className="w-3 h-3 rounded" style={{background:c.color ?? '#999'}} />
+                <div className="font-semibold text-xs">{c.name}</div>
+                <div className="ml-auto text-xs text-gray-600">{onCount}/{ids.length}</div>
+                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
+              </div>
+              <div className="mt-2 space-y-1">
+                {ids.map(id=>{
+                  const l = LINES.find(x=>x.id===id)!;
+                  const isOn = visible[id] !== false;
+                  return (
+                    <div key={id} className="flex items-center gap-2 text-xs" style={{opacity:isOn?1:0.4}}>
+                      <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
+                      <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
+                      <div title={l.name}>{l.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="ml-6 mt-1 space-y-1">
-              {c.trunk.length>=2 && (
-                <div className="flex items-center gap-2" style={{opacity:visible[`${c.id}-trunk`]!==false?1:0.4}}>
-                  <input type="checkbox" checked={visible[`${c.id}-trunk`]!==false} onChange={()=>toggleLine(`${c.id}-trunk`)} />
-                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:'solid'}} />
-                  <div className="text-xs">Ствол</div>
-                </div>
-              )}
-              {c.variants.map(v=> (
-                <div key={v.id} className="flex items-center gap-2" style={{opacity:visible[`${c.id}-var-${v.id}`]!==false?1:0.4}}>
-                  <input type="checkbox" checked={visible[`${c.id}-var-${v.id}`]!==false} onChange={()=>toggleLine(`${c.id}-var-${v.id}`)} />
-                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:v.style==='solid'?'solid':(v.style==='dashed'?'dashed':'dotted')}} />
-                  <div className="text-xs" title={v.path.join(' → ')}>{v.name}</div>
-                </div>
-              ))}
-              {c.feeders?.map(f=> (
-                <div key={f.id} className="flex items-center gap-2" style={{opacity:visible[`${c.id}-fd-${f.id}`]!==false?1:0.4}}>
-                  <input type="checkbox" checked={visible[`${c.id}-fd-${f.id}`]!==false} onChange={()=>toggleLine(`${c.id}-fd-${f.id}`)} />
-                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:f.style==='dashed'?'dashed':(f.style==='dotted'?'dotted':'solid')}} />
-                  <div className="text-xs" title={f.path.join(' → ')}>{f.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </>);
+          );
+        })}
+      </div>
+    </>
+  );
 }

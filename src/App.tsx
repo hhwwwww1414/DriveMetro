@@ -197,6 +197,9 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'NVV-SRG': '#009A49',
 
   'MSK-VLG': '#1A73E8',
+  'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
+  'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
+  
   'MSK-MUR-SPB': '#00B7FF',
   'MSK-MUR-YAR': '#00B7FF',
 

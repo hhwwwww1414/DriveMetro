@@ -178,7 +178,7 @@ const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
 // Цвета
 const COLOR_OVERRIDES: Record<string,string> = {
   'VLG-SRT-UFA': '#F40009',
-  'MSK-ORSK': '#BDBDBD'
+  'MSK-ORSK': '#BDBDBD',
   'MSK-NCH-SALAD': '#7ED957',
   'OMSK-NCH-IZH': '#7ED957',
   'OMSK-NCH-UFA': '#7ED957',

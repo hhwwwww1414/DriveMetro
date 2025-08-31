@@ -136,8 +136,10 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
 
   // Южные / Крым
-  { id:'RST-KRD-CRIMEA', name:'Ростов → Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Ростов-на-Дону','Краснодар','Керчь','Симферополь','Севастополь']) },
-  { id:'RST-MAR-CRIMEA', name:'Волгоград → Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
+  { id:'VLG-RST-PURPLE', name:'Волгоград → Ростов-на-Дону', style:'dashed', path: route(['Волгоград','Ростов-на-Дону']) }, 
+  { id:'RST-MAR-CRIMEA-PINK', name:'Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
+  { id:'RST-KRD-PURPLE', name:'Ростов-на-Дону → Краснодар', style:'dotted', path: route(['Ростов-на-Дону','Краснодар']) },
+  { id:'KRD-CRIMEA-PINK', name:'Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Краснодар','Керчь','Симферополь','Севастополь']) },
   { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
   { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
   { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
@@ -205,8 +207,10 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'MSK-RST': '#FF8F1F',
 
   'SRT-VRN-RST': '#7E57C2',
-  'RST-KRD-CRIMEA': '#7E57C2',
-  'RST-MAR-CRIMEA': '#7E57C2',
+  'VLG-RST-PURPLE': '#7E57C2',
+  'RST-MAR-CRIMEA-PINK': '#EC407A',
+  'RST-KRD-PURPLE': '#7E57C2',
+  'KRD-CRIMEA-PINK': '#EC407A',
   'OMSK-VVO-GREY': '#7E57C2',
   'OMSK-VLG-GREY': '#7E57C2',
   'CHT-MAG': '#8B4513',
@@ -231,7 +235,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_EAST_RED', name:'Кавказ → Тольятти(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA'] },
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
-  { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['RST-MAR-CRIMEA','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','RST-KRD-CRIMEA', 'OMSK-NCH-IZH-GRAY'] }
+  { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['VLG-RST-PURPLE','RST-MAR-CRIMEA-PINK','RST-KRD-PURPLE','KRD-CRIMEA-PINK','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','OMSK-NCH-IZH-GRAY'] }
 ];
 
 function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }

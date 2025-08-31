@@ -134,7 +134,7 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', path: route(['Москва','Тамбов','Волгоград','Элиста']) },
   { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
   { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
-
+  
   // Южные / Крым
   { id:'VLG-RST-PURPLE', name:'Волгоград → Ростов-на-Дону', style:'dashed', path: route(['Волгоград','Ростов-на-Дону']) }, 
   { id:'RST-MAR-CRIMEA-PINK', name:'Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
@@ -165,7 +165,8 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   // Север
   { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
   { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
-
+  { id:'YOL-CHB-NNOV-VLA-MSK', name:'Йошкар-Ола → Чебоксары → Нижний Новгород → Владимир → Москва', style:'solid', path: route(['Йошкар-Ола','Чебоксары','Нижний Новгород','Владимир','Москва']) },
+  { id:'MSK-VLA-NNOV-CHB-KZN-ULY-TLT', name:'Москва → Владимир → Нижний Новгород → Чебоксары → Казань → Ульяновск → Тольятти', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Ульяновск','Тольятти']) },
   // Северные/Сибирские короткие связи
   { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', path: route(['Новый Уренгой','Сургут']) },
   { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', path: route(['Ханты-Мансийск','Сургут']) },
@@ -196,6 +197,8 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'KHM-SRG': '#009A49',
   'NVV-SRG': '#009A49',
 
+  'YOL-CHB-NNOV-VLA-MSK': '#8B4513',
+  'MSK-VLA-NNOV-CHB-KZN-ULY-TLT': '#8B4513',
   'MSK-VLG': '#1A73E8',
   'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
   'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
@@ -239,6 +242,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_EAST_RED', name:'Кавказ → Тольятти(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA'] },
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
+  { id:'C_VOLGA_BROWN', name:'Поволжье (коричневый)', color:'#8B4513', lineIds:['YOL-CHB-NNOV-VLA-MSK','MSK-VLA-NNOV-CHB-KZN-ULY-TLT'] },
   { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['VLG-RST-PURPLE','RST-MAR-CRIMEA-PINK','RST-KRD-PURPLE','KRD-CRIMEA-PINK','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','OMSK-NCH-IZH-GRAY'] }
 ];
 

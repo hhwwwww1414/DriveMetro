@@ -1,11 +1,10 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 
 // ==========================
-// ЭТАЛОННЫЕ ТОЧКИ + МИНИМАЛЬНЫЙ НАБОР ВЕТОК + РЕЖИМ РЕДАКТИРОВАНИЯ ТОЧЕК
+// ЭТАЛОННЫЕ ТОЧКИ + НАБОР ВЕТОК + РЕЖИМ РЕДАКТИРОВАНИЯ
 // — используем только города из BASE_POS; пропущенные в маршрутах — перескакиваем
 // — уникальные цвета/стили для веток; параллельные общие участки разводим
-// — Режим правки: перетаскивание со снапом, ручной ввод X/Y, импорт/экспорт JSON,
-//   локальное сохранение в localStorage, сетка
+// — режим правки: перетаскивание со снапом, ручной ввод X/Y, импорт/экспорт JSON
 // ==========================
 
 type XY = { x:number; y:number };
@@ -100,7 +99,7 @@ const BASE_POS: Record<string, XY> = {
 
 const stations = Object.keys(BASE_POS);
 
-// Города, которые исключаем из маршрутов (по твоему требованию)
+// Исключения из маршрутов
 const REMOVED_FROM_ROUTES = new Set<string>(["Калининград","Кострома"]);
 
 // ---- Геометрия линий ----
@@ -150,100 +149,104 @@ function buildEdgesFromPath(path: string[]): Array<{a:string;b:string}>{
   return edges;
 }
 
-// --- Минимальный набор веток (на базе твоих CSV-маршрутов) ---
+// --- Ветки ---
 const RAW_LINES: Omit<LineDef,'color'>[] = [
-  // --- ОСНОВНЫЕ КОРИДОРЫ ---
+  // Основные коридоры
   { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', path: route(['Москва','Тамбов','Волгоград','Элиста']) },
   { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
+  { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
 
-  // --- ЮЖНЫЕ И КРЫМСКИЕ КОРИДОРЫ ---
-  { id:'RST-KRD-CRIMEA', name:'Ростов → Краснодар → Керчь → Симферополь → Севастополь', style:'solid', path: route(['Ростов-на-Дону','Краснодар','Керчь','Симферополь','Севастополь']) },
-  { id:'RST-MAR-CRIMEA', name:'Ростов → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'solid', path: route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
+  // Южные / Крым
+  { id:'RST-KRD-CRIMEA', name:'Ростов → Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Ростов-на-Дону','Краснодар','Керчь','Симферополь','Севастополь']) },
+  { id:'RST-MAR-CRIMEA', name:'Волгоград → Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
+  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
   { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
   { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
   { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
-  // Дубли (синие)
   { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
   { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
 
-  // --- ВЕТКИ ЦВЕТНЫЕ ДОБАВЛЕННЫЕ ---
-  { id:'TLT-VLG-PURPLE', name:'Тольятти → Волгоград (через Саратов)', style:'solid', path: route(['Тольятти','Саратов','Волгоград']) },
-  { id:'NSK-RST-SOUTH', name:'Новосибирск → Ростов-на-Дону (через Уфу / Тольятти / Саратов / Волгоград)', style:'solid', path: route(['Новосибирск','Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград','Ростов-на-Дону']) },
-  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'solid', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
-  { id:'KRD-RST', name:'Краснодар → Ростов-на-Дону', style:'solid', path: route(['Краснодар','Ростов-на-Дону']) },
-
-  // --- ВОСТОЧНЫЙ КОРИДОР И САЛАТОВЫЕ К НЧ ---
+  // Восточный коридор и салатовые к НЧ
   { id:'OMSK-VVO', name:'Омск → Владивосток (восточный коридор)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (дубль, серый)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', path: route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']) },
   { id:'MSK-NCH-SALAD', name:'Москва → Набережные Челны (через Владимир / Нижний Новгород / Чебоксары / Казань)', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Набережные Челны']) },
   { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны']) },
   { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', path: route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']) },
 
-  // --- ТЁМНО-КОРИЧНЕВАЯ СЕВЕРНАЯ СВЯЗКА ---
+  // Тёмно-коричневый северный блок (перекрашен в бирюзу по просьбе ранее)
   { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', path: route(['Сургут','Тюмень','Екатеринбург']) },
   { id:'EKB-MSK-KIR', name:'Екатеринбург → Москва (через Пермь / Киров / Ярославль)', style:'dashed', path: route(['Екатеринбург','Пермь','Киров','Ярославль','Москва']) },
   { id:'EKB-MSK-IZH', name:'Екатеринбург → Москва (через Пермь / Ижевск / Казань / Чебоксары / Нижний Новгород / Владимир)', style:'dotted', path: route(['Екатеринбург','Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']) },
 
-  // --- СЕВЕР ---
-  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'solid', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
-  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'solid', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
+  // Север
+  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
+  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
 
-  // --- СЕВЕРНЫЕ/СИБИРСКИЕ СОЕДИНЕНИЯ ---
+  // Северные/Сибирские короткие связи
   { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', path: route(['Новый Уренгой','Сургут']) },
   { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', path: route(['Ханты-Мансийск','Сургут']) },
   { id:'NVV-SRG', name:'Нижневартовск → Сургут', style:'solid', path: route(['Нижневартовск','Сургут']) },
   { id:'NSK-GALT', name:'Новосибирск → Горно-Алтайск (через Барнаул / Бийск)', style:'solid', path: route(['Новосибирск','Барнаул','Бийск','Горно-Алтайск']) },
   { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', path: route(['Томск','Кемерово','Новокузнецк']) },
   { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', path: route(['Красноярск','Абакан','Кызыл']) },
-  { id:'CHT-MAG', name:'Чита → Магадан (через Якутск)', style:'solid', path: route(['Чита','Якутск','Магадан']) }
+  { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', path: route(['Сковородино','Якутск','Магадан']) }
 ];
 
-// Удаляем «дыры», чтобы не было undefined-линий
 const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
 
-// Уникальные цвета для всех линий. При желании можно закреплять отдельные.
+// Цвета
 const COLOR_OVERRIDES: Record<string,string> = {
-  // Салатовые ветки к НЧ
+  // Салатовые к НЧ и восточный коридор-основной
   'MSK-NCH-SALAD': '#7ED957',
   'OMSK-NCH-IZH': '#7ED957',
   'OMSK-NCH-UFA': '#7ED957',
   'OMSK-VVO': '#7ED957',
 
-  // Бирюзовая северная связка (Сургут ↔ Екатеринбург ↔ Москва)
-  'SRG-EKB': '#40E0D0',
-  'EKB-MSK-KIR': '#40E0D0',
-  'EKB-MSK-IZH': '#40E0D0',
-  'NRG-SRG': '#40E0D0',
-  'KHM-SRG': '#40E0D0',
-  'NVV-SRG': '#40E0D0',
+  // Зелёный (Линия 2 Мосметро)
+  'SRG-EKB': '#009A49',
+  'EKB-MSK-KIR': '#009A49',
+  'EKB-MSK-IZH': '#009A49',
+  'NRG-SRG': '#009A49',
+  'KHM-SRG': '#009A49',
+  'NVV-SRG': '#009A49',
 
-  // Единый цвет для "Элистинского коридора" от Москвы
-  'MSK-VLG': '#1A73E8',            // Москва → Элиста (через Тамбов / Волгоград)
+  // Элистинский коридор от Москвы
+  'MSK-VLG': '#1A73E8',
+  'MSK-MUR-SPB': '#00B7FF',
+  'MSK-MUR-YAR': '#00B7FF',
 
-  // Фиолетовая группа (юго-восточный коридор от Волгограда)     // Новосибирск → Волгоград (через Тольятти / Саратов)
-  'VLG-ELI-CAUC-PURPLE': '#F40009',// Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ
-  'VLG-ELI-GRZ-MAH': '#F40009',    // Элиста → Будённовск → Грозный → Махачкала (фиолетовый)
-  'VLG-ELI-AST-MAH': '#F40009',    // Элиста → Астрахань → Махачкала   (фиолетовый)
+  // ЯДЕРНО-КРАСНЫЕ
+  'VLG-ELI-CAUC-PURPLE': '#F40009',
+  'VLG-ELI-GRZ-MAH': '#F40009',
+  'VLG-ELI-AST-MAH': '#F40009',
   'TLT-VLG-PURPLE': '#F40009',
-
-  // Дубли этих веток — СИНИМ
+  // Синие дубли
   'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
   'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
 
-  // Жёлтый для объединённой ветки Москва → Владикавказ через Воронеж/Ростов/КМВ
-  'MSK-RST': '#F6C026',
+  // Жёлтый для Москва→Владикавказ
+  'MSK-RST': '#FF8F1F',
 
-  // ЯРКО-СЕРЫЙ транзит и ответвления (по запросу)
-  'NSK-RST-SOUTH': '#BDBDBD',
+  // ЯРКО-СЕРЫЕ
   'SRT-VRN-RST': '#BDBDBD',
-  'KRD-RST': '#BDBDBD'
+  'RST-KRD-CRIMEA': '#BDBDBD',
+  'RST-MAR-CRIMEA': '#BDBDBD',
+  'OMSK-VVO-GREY': '#BDBDBD',
+  'OMSK-VLG-GREY': '#BDBDBD',
+  'CHT-MAG': '#8B4513',
+  'KRS-KYZ': '#8B4513',
+  'TOM-NOVK': '#8B4513',
+  'NSK-GALT': '#8B4513'
 };
 
-const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>({
-  ...l,
-  color: COLOR_OVERRIDES[l.id] ?? distinctColor(i)
-}));
+const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>(
+  {
+    ...l,
+    color: COLOR_OVERRIDES[l.id] ?? distinctColor(i)
+  }
+));
 
-// --- Построение общих отрезков ---
 function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
 
 export default function MetroBranches(){
@@ -265,7 +268,6 @@ export default function MetroBranches(){
     const v: Record<string, boolean> = {}; for(const l of LINES){ if(!l) continue; v[l.id] = true; } return v;
   });
   useEffect(()=>{
-    // гарантируем ключи для новых/переименованных линий
     setVisible(prev=>{ const next={...prev}; let changed=false; for(const l of LINES){ if(!l) continue; if(typeof next[l.id] !== 'boolean'){ next[l.id]=true; changed=true; } } return changed? next: prev; });
   },[]);
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
@@ -284,7 +286,7 @@ export default function MetroBranches(){
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw){ const overrides = JSON.parse(raw) as Record<string,XY>; setPos(p=> ({...p, ...overrides})); }
-    }catch{ /* ignore */ }
+    }catch{}
   },[]);
 
   const saveOverrides = useCallback((next: Record<string,XY>)=>{
@@ -324,7 +326,7 @@ export default function MetroBranches(){
     const {x,y} = screenToWorld(sx, sy);
     let best: {name:string; d:number} | null = null;
     for(const name of stations){ const p = pos[name]; const d = Math.hypot(p.x-x, p.y-y); if(best==null || d<best.d) best={name, d}; }
-    if(best && best.d <= 12) return best.name; // радиус выбора ~12px в мировых координатах
+    if(best && best.d <= 12) return best.name;
     return null;
   },[pos, screenToWorld]);
 
@@ -370,7 +372,6 @@ export default function MetroBranches(){
     const diff: Record<string,XY> = {};
     for(const k of stations){ const b=BASE_POS[k]; const n=pos[k]; if(!b||!n) continue; if(b.x!==n.x||b.y!==n.y) diff[k]={x:n.x,y:n.y}; }
     const txt = JSON.stringify(diff, null, 2);
-    // Покажем в prompt, чтобы можно было быстро скопировать
     prompt('Скопируй JSON оверрайдов:', txt);
   },[pos]);
 
@@ -378,52 +379,37 @@ export default function MetroBranches(){
     let n=0; for(const k of stations){ const b=BASE_POS[k], p=pos[k]; if(!b||!p) continue; if(b.x!==p.x||b.y!==p.y) n++; } return n;
   },[pos]);
 
-  // Простая самодиагностика (тесты)
+  // Самодиагностика
   const selfTest = useMemo(()=>{
     const errors: string[] = [];
     const warns: string[] = [];
-    // 1) у всех станций есть числовые координаты
     for(const k of stations){ const p = pos[k]; if(!p || typeof p.x!=="number" || typeof p.y!=="number") errors.push(`Нет координат для ${k}`); }
-    // 2) у всех линий корректный путь (массив) и хотя бы 2 узла
-    for(const L of LINES){
-      if(!L || !Array.isArray(L.path)) { errors.push(`Линия ${L?.id ?? '<?>'} без корректного path`); continue; }
-      if(L.path.length<2) errors.push(`Линия ${L.id} слишком короткая`);
-    }
-    // 3) у всех станций есть размещённая подпись
-    const lblMissing = stations.filter(n=>!n || !pos[n] || !n.length).length; if(lblMissing>0) warns.push('Есть станции без подписи');
-    // 4) нет NaN координат после оверрайдов
+    for(const L of LINES){ if(!L || !Array.isArray(L.path)) { errors.push(`Линия ${L?.id ?? '<?>'} без корректного path`); continue; } if(L.path.length<2) errors.push(`Линия ${L.id} слишком короткая`); }
     for(const k of stations){ const p=pos[k]; if(Number.isNaN(p.x) || Number.isNaN(p.y)) errors.push(`NaN координаты у ${k}`); }
 
-    // Доп. инварианты (регресс-тесты)
     const expectPath = (id:string, from:string, to:string, minLen:number)=>{
       const line = LINES.find(l=>l && l.id===id);
       if(!line) { errors.push(`Не найдена линия ${id}`); return; }
-      if(line.path[0] !== from || line.path[line.path.length-1] !== to){
-        errors.push(`Линия ${id} должна идти ${from}→${to}, сейчас ${line.path[0]}→${line.path[line.path.length-1]}`);
-      }
+      if(line.path[0] !== from || line.path[line.path.length-1] !== to){ errors.push(`Линия ${id} должна идти ${from}→${to}, сейчас ${line.path[0]}→${line.path[line.path.length-1]}`); }
       if(line.path.length < minLen){ errors.push(`Линия ${id} слишком короткая (ожидали ≥${minLen})`); }
     };
+
+    // Проверки
     expectPath('MSK-NCH-SALAD','Москва','Набережные Челны', 6);
     expectPath('OMSK-NCH-IZH','Омск','Набережные Челны', 4);
-    expectPath('OMSK-NCH-UFA','Омск','Набережные Челны', 5);    expectPath('MSK-RST','Москва','Владикавказ', 5);
+    expectPath('OMSK-NCH-UFA','Омск','Набережные Челны', 5);
+    expectPath('MSK-RST','Москва','Владикавказ', 5);
     expectPath('MSK-VLG','Москва','Элиста', 2);
-    expectPath('TLT-VLG-PURPLE','Тольятти','Волгоград', 3);
-        // Новые регресс-тесты для добавленных веток
     expectPath('SRG-EKB','Сургут','Екатеринбург', 3);
     expectPath('EKB-MSK-KIR','Екатеринбург','Москва', 5);
     expectPath('EKB-MSK-IZH','Екатеринбург','Москва', 8);
     expectPath('MSK-MUR-SPB','Москва','Мурманск', 5);
     expectPath('MSK-MUR-YAR','Москва','Мурманск', 4);
-    // Южные и крымские коридоры
     expectPath('RST-KRD-CRIMEA','Ростов-на-Дону','Севастополь', 4);
-    expectPath('RST-MAR-CRIMEA','Ростов-на-Дону','Севастополь', 4);
-        expectPath('VLG-ELI-GRZ-MAH','Элиста','Махачкала', 3);
+    expectPath('RST-MAR-CRIMEA','Волгоград','Севастополь', 4);
+    expectPath('VLG-ELI-GRZ-MAH','Элиста','Махачкала', 3);
     expectPath('VLG-ELI-AST-MAH','Элиста','Махачкала', 2);
-    // Дубли (синие)
-    expectPath('VLG-ELI-GRZ-MAH-BLUE','Элиста','Махачкала', 3);
-    expectPath('VLG-ELI-AST-MAH-BLUE','Элиста','Махачкала', 2);
     expectPath('VLG-ELI-CAUC-PURPLE','Волгоград','Владикавказ', 5);
-    // Новые проверки
     expectPath('MSK-ORSK','Москва','Орск', 5);
     expectPath('NRG-SRG','Новый Уренгой','Сургут', 2);
     expectPath('KHM-SRG','Ханты-Мансийск','Сургут', 2);
@@ -431,20 +417,35 @@ export default function MetroBranches(){
     expectPath('NSK-GALT','Новосибирск','Горно-Алтайск', 4);
     expectPath('TOM-NOVK','Томск','Новокузнецк', 3);
     expectPath('KRS-KYZ','Красноярск','Кызыл', 3);
-    expectPath('CHT-MAG','Чита','Магадан', 3);
+    expectPath('CHT-MAG','Сковородино','Магадан', 3);
     expectPath('OMSK-VVO','Омск','Владивосток', 8);
-    expectPath('NSK-RST-SOUTH','Новосибирск','Ростов-на-Дону', 8);
+    expectPath('OMSK-VVO-GREY','Омск','Владивосток', 8);
+    expectPath('OMSK-VLG-GREY','Омск','Волгоград', 6);
     expectPath('SRT-VRN-RST','Саратов','Ростов-на-Дону', 3);
-    expectPath('KRD-RST','Краснодар','Ростов-на-Дону', 2);
-    // Доп. инвариант для восточного коридора: Свободный → Благовещенск → Биробиджан
-    { const east = LINES.find(l=>l.id==='OMSK-VVO'); if(east){ const p=east.path; const iS=p.indexOf('Свободный'), iB=p.indexOf('Благовещенск'), iBi=p.indexOf('Биробиджан'); if(iS<0||iB<0||iBi<0 || !(iS<iB && iB<iBi)) errors.push('NSK-VVO: Ожидается порядок Свободный→Благовещенск→Биробиджан'); } }
+
+    // Стиль/цвет серых веток
+    const expectStyle = (id:string, style:LineStyle)=>{ const line = LINES.find(l=>l && l.id===id); if(!line){ errors.push(`Не найдена линия ${id}`); return; } if(line.style!==style){ errors.push(`Линия ${id} должна быть style=${style}, сейчас ${line.style}`); } };
+    const expectColor = (id:string, color:string)=>{ const col = COLOR_OVERRIDES[id]; if(col!==color){ warns.push(`Цвет линии ${id} ожидается ${color}, сейчас ${col ?? 'по умолчанию'}`); } };
+    expectStyle('SRT-VRN-RST','dashed'); expectColor('SRT-VRN-RST','#BDBDBD');
+    expectStyle('RST-MAR-CRIMEA','dashed'); expectColor('RST-MAR-CRIMEA','#BDBDBD');
+    expectStyle('RST-KRD-CRIMEA','dotted'); expectColor('RST-KRD-CRIMEA','#BDBDBD');
+
+    // Север на Мурманск — один цвет, разные стили
+    expectStyle('MSK-MUR-SPB','dashed');
+    expectStyle('MSK-MUR-YAR','dotted');
+    if ((COLOR_OVERRIDES['MSK-MUR-SPB'] ?? '') !== (COLOR_OVERRIDES['MSK-MUR-YAR'] ?? '')) {
+      warns.push('MSK-MUR-SPB и MSK-MUR-YAR должны быть одного цвета');
+    }
+
+    // Удалённые линии не должны присутствовать
+    if(LINES.some(l=>l && l.id==='KRD-RST')) errors.push('KRD-RST должна быть удалена, но всё ещё присутствует');
+    if(LINES.some(l=>l && l.id==='NSK-RST-SOUTH')) errors.push('NSK-RST-SOUTH должна быть удалена, но всё ещё присутствует');
 
     return {errors, warns};
   },[pos]);
 
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
-      {/* Шапка */}
       <div className="bg-white border-b p-3 flex items-center gap-2">
         <h1 className="text-xl font-semibold text-gray-800">Карта веток по эталонным точкам</h1>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -475,7 +476,6 @@ export default function MetroBranches(){
           <h3 className="font-bold text-base mb-2 text-gray-800">Ветки и стили</h3>
           <LegendControls LINES={LINES} visible={visible} toggleLine={toggleLine} soloLine={soloLine} showAll={showAll} hideAll={hideAll} invertAll={invertAll} />
 
-          {/* Статус самодиагностики */}
           <div className="mt-4 border-t pt-3 text-xs">
             <div className="font-semibold text-gray-800 mb-1">Статус</div>
             {selfTest.errors.length>0 || selfTest.warns.length>0 ? (
@@ -496,7 +496,6 @@ export default function MetroBranches(){
             )}
           </div>
 
-          {/* Панель редактирования точки */}
           <PointEditor stations={stations} pos={pos} setPos={setPos} saveOverrides={saveOverrides} halfSnap={halfSnap} />
         </div>
 
@@ -507,7 +506,7 @@ export default function MetroBranches(){
             width={containerWidth}
             height={containerHeight}
             onWheel={handleWheel}
-            onMouseDown={(e)=>{ /* сброс выбора при клике в пустоту */ if((e.target as HTMLElement).tagName==='svg') setSelected(null); handleMouseDown(e); }}
+            onMouseDown={(e)=>{ if((e.target as HTMLElement).tagName==='svg') setSelected(null); handleMouseDown(e); }}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -517,13 +516,8 @@ export default function MetroBranches(){
             <rect width="100%" height="100%" fill="#fafafa" />
 
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              {/* Сетка */}
               {showGrid && <Grid />}
-
-              {/* Линии маршрутов с разводкой параллельных */}
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
-
-              {/* Точки + подписи */}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} editMode={editMode} selected={selected} setSelected={setSelected} />
             </g>
           </svg>
@@ -533,7 +527,6 @@ export default function MetroBranches(){
   );
 }
 
-// === Вспомогательные подкомпоненты ===
 function Grid(){
   const lines: JSX.Element[] = [];
   const minX = -800, maxX = 3200, minY = -200, maxY = 2000;
@@ -565,8 +558,7 @@ function RouteLines({lines, pos, allLines}:{lines:LineDef[]; pos:Record<string,X
 function StationsAndLabels({stations, pos, labels, editMode, selected, setSelected}:{stations:string[]; pos:Record<string,XY>; labels:Record<string,any>; editMode:boolean; selected:string|null; setSelected:(s:string|null)=>void;}){
   return <>
     {stations.map(name=>{
-      const p = pos[name];
-      const isSelected = selected===name;
+      const p = pos[name]; const isSelected = selected===name;
       return (
         <g key={name}>
           {isSelected && (<circle cx={p.x} cy={p.y} r={10} fill="none" stroke="#22c55e" strokeWidth={2} strokeDasharray="4 4" />)}
@@ -632,7 +624,7 @@ function LegendControls({LINES, visible, toggleLine, soloLine, showAll, hideAll,
           return (
             <div key={l.id} className="flex items-center gap-2 text-sm" style={{opacity: isOn ? 1 : 0.4}}>
               <input type="checkbox" checked={isOn} onChange={()=>toggleLine(l.id)} />
-              <div className="w-6 h-1.5" style={{background: l.style==='solid'? l.color : 'transparent', borderBottom: l.style==='solid'? 'none' : `2px ${l.style==='dashed'? 'dashed':'dotted'} ${l.color}`}} />
+              <div className="w-8 h-0 border-b-4" style={{borderColor: l.color, borderBottomStyle: l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
               <div className="font-medium text-xs" title={(l.path||[]).join(' → ')}>{l.name}</div>
               <button onClick={()=>soloLine(l.id)} className="ml-auto px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
             </div>

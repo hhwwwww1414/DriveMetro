@@ -142,6 +142,8 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
   { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
   { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
+  { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
+  { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
   // Красное продление на восток
   { id:'VLG-SRT-UFA', name:'Волгоград → Уфа (через Саратов / Тольятти)', style:'solid', path: route(['Волгоград','Саратов','Тольятти','Уфа']) },
   { id:'UFA-NCH-EKB-TMN-OMSK', name:'Уфа → Омск (через НЧ / Екатеринбург / Тюмень)', style:'dashed', path: route(['Уфа','Набережные Челны','Екатеринбург','Тюмень','Омск']) },
@@ -150,7 +152,8 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны']) },
   { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', path: route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']) },
   { id:'OMSK-VVO', name:'Омск → Владивосток (восточный коридор)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
-  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (дубль, серый)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (серая)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
+  { id:'OMSK-VVO-SALAD', name:'Омск → Владивосток (салатовая)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
   { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', path: route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']) },
 
   // Тёмно-коричневый северный блок
@@ -184,6 +187,7 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'MSK-NCH-SALAD': '#7ED957',
   'OMSK-NCH-IZH': '#7ED957',
   'OMSK-NCH-UFA': '#7ED957',
+  'OMSK-VVO-SALAD': '#7ED957',
 
   'SRG-EKB': '#009A49',
   'EKB-MSK-KIR': '#009A49',
@@ -223,13 +227,13 @@ const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>(
 // === Коридоры (группировка линий) ===
 type Corridor = { id:string; name:string; color?:string; lineIds:string[] };
 const CORRIDORS: Corridor[] = [
-  { id:'C_NORTH_GREEN', name:'Сургут → Москва (зелёный коридор)', color:'#009A49', lineIds:['SRG-EKB','EKB-MSK-KIR','EKB-MSK-IZH','NRG-SRG','KHM-SRG','NVV-SRG'] },
+  { id:'C_NORTH_GREEN', name:'Новый Уренгой → Москва (зелёный)', color:'#009A49', lineIds:['SRG-EKB','EKB-MSK-KIR','EKB-MSK-IZH','NRG-SRG','KHM-SRG','NVV-SRG'] },
   { id:'C_MURMANSK_ICE', name:'Москва → Мурманск (ледяной)', color:'#00B7FF', lineIds:['MSK-MUR-SPB','MSK-MUR-YAR'] },
-  { id:'C_MSK_ELI_BLUE', name:'Москва → Элиста', color:'#1A73E8', lineIds:['MSK-VLG'] },
-  { id:'C_EAST_RED', name:'Волгоград → Владивосток', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA','UFA-NCH-EKB-TMN-OMSK','UFA-CHL-KGN-OMSK','OMSK-VVO'] },
-  { id:'C_EAST_SALAD', name:'Москва / Омск → Набережные Челны (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA'] },
+  { id:'C_MSK_ELI_BLUE', name:'Москва → Махачкала(M6-синий)', color:'#1A73E8', lineIds:['MSK-VLG', 'VLG-ELI-GRZ-MAH-BLUE','VLG-ELI-AST-MAH-BLUE'] },
+  { id:'C_EAST_RED', name:'Кавказ → Владивосток(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA','UFA-NCH-EKB-TMN-OMSK','UFA-CHL-KGN-OMSK','OMSK-VVO'] },
+  { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
-  { id:'C_SOUTH_GREY', name:'Южный / Крымский (серый)', color:'#BDBDBD', lineIds:['RST-MAR-CRIMEA','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','RST-KRD-CRIMEA'] }
+  { id:'C_SOUTH_GREY', name:'Крым → Владивосток(серый)', color:'#BDBDBD', lineIds:['RST-MAR-CRIMEA','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','RST-KRD-CRIMEA'] }
 ];
 
 function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }

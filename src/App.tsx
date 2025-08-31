@@ -139,6 +139,8 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'VLG-RST-PURPLE', name:'Волгоград → Ростов-на-Дону', style:'dashed', path: route(['Волгоград','Ростов-на-Дону']) }, 
   { id:'RST-MAR-CRIMEA-PINK', name:'Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
   { id:'RST-KRD-PURPLE', name:'Ростов-на-Дону → Краснодар', style:'dotted', path: route(['Ростов-на-Дону','Краснодар']) },
+  { id:'MSK-RSTDN', name:'Москва → Ростов', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону'])
+  { id:'RST-KRD', name:'Ростов-на-Дону → Краснодар', style:'solid', path: route(['Ростов-на-Дону','Краснодар']) },
   { id:'KRD-CRIMEA-PINK', name:'Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Краснодар','Керчь','Симферополь','Севастополь']) },
   { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
   { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
@@ -184,6 +186,8 @@ const COLOR_OVERRIDES: Record<string,string> = {
   'OMSK-NCH-IZH': '#7ED957',
   'OMSK-NCH-UFA': '#7ED957',
   'OMSK-VVO-SALAD': '#7ED957',
+  'MSK-RSTDN': '#FF8C00',
+  'RST-KRD': '#FF8C00',
 
   'SRG-EKB': '#009A49',
   'EKB-MSK-KIR': '#009A49',

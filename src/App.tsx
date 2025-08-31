@@ -181,9 +181,6 @@ const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
 // Цвета
 const COLOR_OVERRIDES: Record<string,string> = {
   'VLG-SRT-UFA': '#F40009',
-  'UFA-NCH-EKB-TMN-OMSK': '#F40009',
-  'UFA-CHL-KGN-OMSK': '#F40009',
-  'OMSK-VVO': '#F40009',
 
   'MSK-NCH-SALAD': '#7ED957',
   'OMSK-NCH-IZH': '#7ED957',
@@ -235,7 +232,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_NORTH_GREEN', name:'Новый Уренгой → Москва (зелёный)', color:'#009A49', lineIds:['SRG-EKB','EKB-MSK-KIR','EKB-MSK-IZH','NRG-SRG','KHM-SRG','NVV-SRG'] },
   { id:'C_MURMANSK_ICE', name:'Москва → Мурманск (ледяной)', color:'#00B7FF', lineIds:['MSK-MUR-SPB','MSK-MUR-YAR'] },
   { id:'C_MSK_ELI_BLUE', name:'Москва → Махачкала(M6-синий)', color:'#1A73E8', lineIds:['MSK-VLG', 'VLG-ELI-GRZ-MAH-BLUE','VLG-ELI-AST-MAH-BLUE'] },
-  { id:'C_EAST_RED', name:'Кавказ → Владивосток(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA','UFA-NCH-EKB-TMN-OMSK','UFA-CHL-KGN-OMSK','OMSK-VVO'] },
+  { id:'C_EAST_RED', name:'Кавказ → Тольятти(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA'] },
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
   { id:'C_SOUTH_GREY', name:'Крым → Владивосток(серый)', color:'#BDBDBD', lineIds:['RST-MAR-CRIMEA','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','RST-KRD-CRIMEA', 'OMSK-NCH-IZH-GRAY'] }

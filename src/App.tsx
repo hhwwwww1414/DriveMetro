@@ -1,23 +1,13 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
 
-// ==========================
-// ЭТАЛОННЫЕ ТОЧКИ + НАБОР ВЕТОК + РЕЖИМ РЕДАКТИРОВАНИЯ
-// — используем только города из BASE_POS; пропущенные в маршрутах — перескакиваем
-// — уникальные цвета/стили для веток; параллельные общие участки разводим
-// — режим правки: перетаскивание со снапом, ручной ввод X/Y, импорт/экспорт JSON
-// ==========================
-
 type XY = { x:number; y:number };
-
 type LineStyle = 'solid' | 'dashed' | 'dotted';
-
 type LineDef = { id: string; name: string; style: LineStyle; color: string; path: string[] };
 
 const GRID = 120;
-const STORAGE_KEY = 'metro_pos_overrides_v2';
 const STORAGE_VISIBLE = 'metro_lines_visibility_v1';
 
-// --- Базовые (эталонные) координаты ---
+// --- Базовые координаты станций ---
 const BASE_POS: Record<string, XY> = {
   "Абакан": {x:1920, y:600},
   "Астрахань": {x:480, y:1320},
@@ -98,427 +88,237 @@ const BASE_POS: Record<string, XY> = {
 };
 
 const stations = Object.keys(BASE_POS);
-
-// Исключения из маршрутов
 const REMOVED_FROM_ROUTES = new Set<string>(["Калининград","Кострома"]);
 
-// ---- Геометрия линий ----
+// --- Геометрия и утилиты ---
 function unitPerp(ax:number, ay:number, bx:number, by:number){
-  const dx = bx-ax, dy = by-ay; const len = Math.hypot(dx,dy) || 1; return {px: -dy/len, py: dx/len};
+  const dx=bx-ax, dy=by-ay; const len=Math.hypot(dx,dy)||1; return {px:-dy/len, py:dx/len};
 }
-function edgeKey(a:string,b:string){ return a<b? `${a}__${b}` : `${b}__${a}`; }
-
+function edgeKey(a:string,b:string){ return a<b?`${a}__${b}`:`${b}__${a}`; }
 function estimateTextSize(text:string, fontSize=13){
-  const w=Math.ceil(text.length*fontSize*0.62), h=Math.ceil(fontSize*1.25);
-  return {w,h};
+  const w=Math.ceil(text.length*fontSize*0.62), h=Math.ceil(fontSize*1.25); return {w,h};
 }
 
-type LabelPlacement = { x:number; y:number; anchor: 'start'|'end' };
+type LabelPlacement = { x:number; y:number; anchor:'start'|'end' };
 function placeLabels(names:string[], pos:Record<string,XY>, fontSize=13, scale=1){
-  const placed: Record<string, LabelPlacement> = {}; const rects: Array<{x:number;y:number;w:number;h:number}> = [];
+  const placed:Record<string,LabelPlacement>={}; const rects:Array<{x:number;y:number;w:number;h:number}>=[];
   const entries = names.map(n=>[n,pos[n]] as const).sort((a,b)=>(a[1].y-b[1].y)||(a[1].x-b[1].x));
   const collide=(r:{x:number;y:number;w:number;h:number})=>rects.some(q=>!(r.x+r.w<q.x||q.x+q.w<r.x||r.y+r.h<q.y||q.y+q.h<r.y));
   const mk=(name:string,x:number,y:number,anchor:'start'|'end')=>{ const {w,h}=estimateTextSize(name,fontSize); const pad=3*scale; const rx=anchor==='start'?x:x-w*scale; const ry=y-h*scale+4*scale; return {rect:{x:rx-pad,y:ry-pad,w:w*scale+pad*2,h:h*scale+pad*2}}; };
-  for(const [name,p] of entries){ let chosen: LabelPlacement|undefined; const base=20*scale; const radii=[base, base*1.4, base*1.8, base*2.2, base*2.6];
-    for(const d of radii){ const cands: LabelPlacement[]=[
-      {x:p.x+d,y:p.y-d*0.5,anchor:'start'},
-      {x:p.x+d,y:p.y+d*0.8,anchor:'start'},
-      {x:p.x-d,y:p.y+d*0.8,anchor:'end'},
-      {x:p.x-d,y:p.y-d*0.5,anchor:'end'},
-      {x:p.x,y:p.y-d*1.2,anchor:'start'},
-      {x:p.x,y:p.y+d*1.2,anchor:'start'},
-    ];
-      for(const c of cands){ const {rect}=mk(name,c.x,c.y,c.anchor); if(!collide(rect)){ rects.push(rect); chosen=c; break; } } if(chosen) break; }
+  for(const [name,p] of entries){ let chosen:LabelPlacement|undefined; const base=20*scale; const radii=[base,base*1.4,base*1.8,base*2.2,base*2.6];
+    for(const d of radii){ const cands:LabelPlacement[]=[{x:p.x+d,y:p.y-d*0.5,anchor:'start'},{x:p.x+d,y:p.y+d*0.8,anchor:'start'},{x:p.x-d,y:p.y+d*0.8,anchor:'end'},{x:p.x-d,y:p.y-d*0.5,anchor:'end'},{x:p.x,y:p.y-d*1.2,anchor:'start'},{x:p.x,y:p.y+d*1.2,anchor:'start'}];
+      for(const c of cands){ const {rect}=mk(name,c.x,c.y,c.anchor); if(!collide(rect)){ rects.push(rect); chosen=c; break; } }
+      if(chosen) break; }
     if(!chosen){ chosen={x:p.x+base*3.2,y:p.y+base*3.2,anchor:'start'}; const {rect}=mk(name,chosen.x,chosen.y,chosen.anchor); rects.push(rect); }
     placed[name]=chosen; }
-  return placed; }
+  return placed;
+}
 
-// Helpers
-const distinctColor = (i:number)=>`hsl(${(i*137.508)%360}, 72%, 45%)`;
-const snap = (v:number, step:number)=> Math.round(v/step)*step;
-
-function route(path: string[]): string[]{
-  const out: string[] = [];
-  for(const name of path){ if(!BASE_POS[name]) continue; if(REMOVED_FROM_ROUTES.has(name)) continue; if(out.length===0 || out[out.length-1]!==name) out.push(name); }
+function route(path:string[]):string[]{
+  const out:string[]=[];
+  for(const name of path){ if(!BASE_POS[name]) continue; if(REMOVED_FROM_ROUTES.has(name)) continue; if(out.length===0||out[out.length-1]!==name) out.push(name); }
   return out;
 }
 
-function buildEdgesFromPath(path: string[]): Array<{a:string;b:string}>{
-  const edges: Array<{a:string;b:string}> = [];
+function buildEdgesFromPath(path:string[]):Array<{a:string;b:string}>{
+  const edges:Array<{a:string;b:string}>=[];
   for(let i=0;i<path.length-1;i++){ const a=path[i], b=path[i+1]; if(a!==b) edges.push({a,b}); }
   return edges;
 }
 
-// --- Ветки ---
-const RAW_LINES: Omit<LineDef,'color'>[] = [
-  // Основные коридоры
-  { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', path: route(['Москва','Тамбов','Волгоград','Элиста']) },
-  { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
-  { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
-
-  // Южные / Крым
-  { id:'RST-KRD-CRIMEA', name:'Ростов → Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Ростов-на-Дону','Краснодар','Керчь','Симферополь','Севастополь']) },
-  { id:'RST-MAR-CRIMEA', name:'Волгоград → Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
-  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
-  { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
-  { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
-  { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
-  { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
-  { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала (дубль, синий)', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
-
-  // Восточный коридор и салатовые к НЧ
-  { id:'OMSK-VVO', name:'Омск → Владивосток (восточный коридор)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
-  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (дубль, серый)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
-  { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', path: route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']) },
-  { id:'MSK-NCH-SALAD', name:'Москва → Набережные Челны (через Владимир / Нижний Новгород / Чебоксары / Казань)', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Набережные Челны']) },
-  { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны']) },
-  { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', path: route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']) },
-
-  // Тёмно-коричневый северный блок (перекрашен в бирюзу по просьбе ранее)
-  { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', path: route(['Сургут','Тюмень','Екатеринбург']) },
-  { id:'EKB-MSK-KIR', name:'Екатеринбург → Москва (через Пермь / Киров / Ярославль)', style:'dashed', path: route(['Екатеринбург','Пермь','Киров','Ярославль','Москва']) },
-  { id:'EKB-MSK-IZH', name:'Екатеринбург → Москва (через Пермь / Ижевск / Казань / Чебоксары / Нижний Новгород / Владимир)', style:'dotted', path: route(['Екатеринбург','Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']) },
-
-  // Север
-  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
-  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
-
-  // Северные/Сибирские короткие связи
-  { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', path: route(['Новый Уренгой','Сургут']) },
-  { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', path: route(['Ханты-Мансийск','Сургут']) },
-  { id:'NVV-SRG', name:'Нижневартовск → Сургут', style:'solid', path: route(['Нижневартовск','Сургут']) },
-  { id:'NSK-GALT', name:'Новосибирск → Горно-Алтайск (через Барнаул / Бийск)', style:'solid', path: route(['Новосибирск','Барнаул','Бийск','Горно-Алтайск']) },
-  { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', path: route(['Томск','Кемерово','Новокузнецк']) },
-  { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', path: route(['Красноярск','Абакан','Кызыл']) },
-  { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', path: route(['Сковородино','Якутск','Магадан']) }
-];
-
-const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
-
-// Цвета
-const COLOR_OVERRIDES: Record<string,string> = {
-  // Салатовые к НЧ и восточный коридор-основной
-  'MSK-NCH-SALAD': '#7ED957',
-  'OMSK-NCH-IZH': '#7ED957',
-  'OMSK-NCH-UFA': '#7ED957',
-  'OMSK-VVO': '#7ED957',
-
-  // Зелёный (Линия 2 Мосметро)
-  'SRG-EKB': '#009A49',
-  'EKB-MSK-KIR': '#009A49',
-  'EKB-MSK-IZH': '#009A49',
-  'NRG-SRG': '#009A49',
-  'KHM-SRG': '#009A49',
-  'NVV-SRG': '#009A49',
-
-  // Элистинский коридор от Москвы
-  'MSK-VLG': '#1A73E8',
-  'MSK-MUR-SPB': '#00B7FF',
-  'MSK-MUR-YAR': '#00B7FF',
-
-  // ЯДЕРНО-КРАСНЫЕ
-  'VLG-ELI-CAUC-PURPLE': '#F40009',
-  'VLG-ELI-GRZ-MAH': '#F40009',
-  'VLG-ELI-AST-MAH': '#F40009',
-  'TLT-VLG-PURPLE': '#F40009',
-  // Синие дубли
-  'VLG-ELI-GRZ-MAH-BLUE': '#1A73E8',
-  'VLG-ELI-AST-MAH-BLUE': '#1A73E8',
-
-  // Жёлтый для Москва→Владикавказ
-  'MSK-RST': '#FF8F1F',
-
-  // ЯРКО-СЕРЫЕ
-  'SRT-VRN-RST': '#BDBDBD',
-  'RST-KRD-CRIMEA': '#BDBDBD',
-  'RST-MAR-CRIMEA': '#BDBDBD',
-  'OMSK-VVO-GREY': '#BDBDBD',
-  'OMSK-VLG-GREY': '#BDBDBD',
-  'CHT-MAG': '#8B4513',
-  'KRS-KYZ': '#8B4513',
-  'TOM-NOVK': '#8B4513',
-  'NSK-GALT': '#8B4513'
+// --- Коридоры ---
+type Corridor = {
+  id: string;
+  name: string;
+  color: string;
+  trunk: string[];
+  variants: { id:string; name:string; style:LineStyle; path:string[] }[];
+  feeders?: { id:string; name:string; path:string[]; style?:LineStyle }[];
 };
 
-const LINES: LineDef[] = RAW_LINES_CLEAN.map((l,i)=>(
-  {
-    ...l,
-    color: COLOR_OVERRIDES[l.id] ?? distinctColor(i)
-  }
-));
+function compileCorridorsToLines(corridors:Corridor[]){
+  const lines:LineDef[]=[]; const groups:Record<string,string[]>={};
+  corridors.forEach(c=>{
+    const ids:string[]=[];
+    if(c.trunk.length>=2){ const id=`${c.id}-trunk`; lines.push({id,name:c.name,style:'solid',color:c.color,path:route(c.trunk)}); ids.push(id); }
+    c.variants.forEach(v=>{ const id=`${c.id}-var-${v.id}`; lines.push({id,name:v.name,style:v.style,color:c.color,path:route(v.path)}); ids.push(id); });
+    c.feeders?.forEach(f=>{ const id=`${c.id}-fd-${f.id}`; lines.push({id,name:f.name,style:f.style??'solid',color:c.color,path:route(f.path)}); ids.push(id); });
+    groups[c.id]=ids;
+  });
+  return {lines, groups};
+}
 
-function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
+const CORRIDORS:Corridor[]=[
+  {
+    id:'north-gas',
+    name:'Сургут → Москва',
+    color:'#009A49',
+    trunk:['Сургут','Тюмень','Екатеринбург','Пермь'],
+    variants:[
+      {id:'kir',name:'через Киров',style:'dashed',path:['Пермь','Киров','Ярославль','Москва']},
+      {id:'kaz',name:'через Казань',style:'dotted',path:['Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']},
+    ],
+    feeders:[
+      {id:'nurg',name:'Новый Уренгой → Сургут',path:['Новый Уренгой','Сургут']},
+      {id:'khm',name:'Ханты-Мансийск → Сургут',path:['Ханты-Мансийск','Сургут']},
+      {id:'nvv',name:'Нижневартовск → Сургут',path:['Нижневартовск','Сургут']},
+    ]
+  },
+  {
+    id:'north',
+    name:'Москва → Мурманск',
+    color:'#00B7FF',
+    trunk:['Медвежьегорск','Мурманск'],
+    variants:[
+      {id:'spb',name:'через Санкт-Петербург',style:'dashed',path:['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск']},
+      {id:'yar',name:'через Ярославль',style:'dotted',path:['Москва','Ярославль','Вологда','Медвежьегорск']},
+    ]
+  },
+  {
+    id:'elista',
+    name:'Москва → Элиста',
+    color:'#F40009',
+    trunk:['Москва','Тамбов','Волгоград','Элиста'],
+    variants:[
+      {id:'vlk',name:'на Владикавказ',style:'solid',path:['Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']},
+      {id:'grz',name:'через Будённовск',style:'solid',path:['Элиста','Будённовск','Грозный','Махачкала']},
+      {id:'ast',name:'через Астрахань',style:'solid',path:['Элиста','Астрахань','Махачкала']},
+    ]
+  },
+  {
+    id:'east',
+    name:'Омск → Владивосток',
+    color:'#7ED957',
+    trunk:['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток'],
+    variants:[],
+  },
+  {
+    id:'south-coast',
+    name:'Ростов → Крым',
+    color:'#BDBDBD',
+    trunk:['Симферополь','Севастополь'],
+    variants:[
+      {id:'mariupol',name:'через Мариуполь',style:'dashed',path:['Волгоград','Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь']},
+      {id:'krasnodar',name:'через Краснодар',style:'dotted',path:['Ростов-на-Дону','Краснодар','Керчь','Симферополь']},
+    ],
+    feeders:[
+      {id:'vlg-rst',name:'Волгоград → Ростов',path:['Волгоград','Ростов-на-Дону']},
+      {id:'srt-vrn-rst',name:'Саратов → Ростов',style:'dashed',path:['Саратов','Воронеж','Ростов-на-Дону']},
+    ]
+  },
+  {
+    id:'siberia',
+    name:'Сибирские ответвления',
+    color:'#8B4513',
+    trunk:[],
+    variants:[
+      {id:'nsk-galt',name:'Новосибирск → Горно-Алтайск',style:'solid',path:['Новосибирск','Барнаул','Бийск','Горно-Алтайск']},
+      {id:'tom-novk',name:'Томск → Новокузнецк',style:'solid',path:['Томск','Кемерово','Новокузнецк']},
+      {id:'krs-kyz',name:'Красноярск → Кызыл',style:'solid',path:['Красноярск','Абакан','Кызыл']},
+      {id:'cht-mag',name:'Сковородино → Магадан',style:'solid',path:['Сковородино','Якутск','Магадан']},
+    ]
+  }
+];
+
+const {lines:LINES, groups:CORRIDOR_GROUPS} = compileCorridorsToLines(CORRIDORS);
+
+function buildEdges(line:LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
 
 export default function MetroBranches(){
-  const [scale, setScale] = useState(0.6);
-  const [translateX, setTranslateX] = useState(300);
-  const [translateY, setTranslateY] = useState(150);
+  const [scale,setScale]=useState(0.6);
+  const [translateX,setTranslateX]=useState(300);
+  const [translateY,setTranslateY]=useState(150);
+  const [isDragging,setIsDragging]=useState(false);
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStation, setDragStation] = useState<string|null>(null);
-  const [selected, setSelected] = useState<string|null>(null);
-
-  const [halfSnap, setHalfSnap] = useState(false);
-  const [showGrid, setShowGrid] = useState(false);
-  const [editMode, setEditMode] = useState(true);
-
-  // Видимость веток
-  const [visible, setVisible] = useState<Record<string, boolean>>(()=>{
-    try { const raw = localStorage.getItem(STORAGE_VISIBLE); if(raw) return JSON.parse(raw); } catch {}
-    const v: Record<string, boolean> = {}; for(const l of LINES){ if(!l) continue; v[l.id] = true; } return v;
+  const [visible,setVisible]=useState<Record<string,boolean>>(()=>{
+    try{ const raw=localStorage.getItem(STORAGE_VISIBLE); if(raw) return JSON.parse(raw); }catch{}
+    const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=true; return v;
   });
-  useEffect(()=>{
-    setVisible(prev=>{ const next={...prev}; let changed=false; for(const l of LINES){ if(!l) continue; if(typeof next[l.id] !== 'boolean'){ next[l.id]=true; changed=true; } } return changed? next: prev; });
-  },[]);
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
-  const activeLines = useMemo(()=> LINES.filter(l => l && visible[l.id] !== false), [visible]);
-  const toggleLine = useCallback((id:string)=>{ setVisible(v=> ({...v, [id]: !(v[id] !== false)})); },[]);
-  const soloLine = useCallback((id:string)=>{ const v:Record<string,boolean>={}; for(const l of LINES) if(l) v[l.id] = (l.id===id); setVisible(v); },[]);
-  const showAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) if(l) v[l.id]=true; setVisible(v); },[]);
-  const hideAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) if(l) v[l.id]=false; setVisible(v); },[]);
-  const invertAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) if(l) v[l.id]= !(visible[l.id] !== false); setVisible(v); },[visible]);
 
-  // Позиции c учётом оверрайдов
-  const [pos, setPos] = useState<Record<string, XY>>(()=> ({...BASE_POS}));
-
-  // Загрузка/сохранение оверрайдов
-  useEffect(()=>{
-    try{
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if(raw){ const overrides = JSON.parse(raw) as Record<string,XY>; setPos(p=> ({...p, ...overrides})); }
-    }catch{}
+  const activeLines = useMemo(()=> LINES.filter(l=> visible[l.id]!==false), [visible]);
+  const toggleLine = useCallback((id:string)=>{ setVisible(v=>({...v,[id]:!(v[id]!==false)})); },[]);
+  const toggleCorridor = useCallback((cid:string)=>{
+    setVisible(v=>{ const ids=CORRIDOR_GROUPS[cid]; const allOn=ids.every(id=>v[id]!==false); const next={...v}; ids.forEach(id=>next[id]=!allOn); return next; });
   },[]);
+  const showAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=true; setVisible(v); },[]);
+  const hideAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=false; setVisible(v); },[]);
+  const invertAll = useCallback(()=>{ const v:Record<string,boolean>={}; for(const l of LINES) v[l.id]=!(visible[l.id]!==false); setVisible(v); },[visible]);
 
-  const saveOverrides = useCallback((next: Record<string,XY>)=>{
-    const diff: Record<string,XY> = {};
-    for(const k of stations){ const b=BASE_POS[k]; const n=next[k]; if(!b||!n) continue; if(b.x!==n.x||b.y!==n.y) diff[k]={x:n.x,y:n.y}; }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(diff));
-  },[]);
-
+  const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
+  const labels = useMemo(()=>placeLabels(stations,pos,13,scale),[scale]);
 
-  const labels = useMemo(()=>placeLabels(stations, pos, 13, scale), [pos, scale]);
-  const containerWidth = 1200, containerHeight = 800;
+  const containerWidth=1200, containerHeight=800;
 
-  const screenToWorld = useCallback((sx:number, sy:number)=>{
-    return { x: (sx - translateX)/scale, y: (sy - translateY)/scale };
-  },[scale, translateX, translateY]);
+  const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
+    const newScale=Math.max(0.2, Math.min(3, scale+delta)); if(newScale===scale) return;
+    const rect=svgRef.current?.getBoundingClientRect();
+    const zx=centerX ?? (rect?rect.width/2:containerWidth/2);
+    const zy=centerY ?? (rect?rect.height/2:containerHeight/2);
+    const k=newScale/scale;
+    const nx=zx+(translateX-zx)*k; const ny=zy+(translateY-zy)*k;
+    setScale(newScale); setTranslateX(nx); setTranslateY(ny);
+  },[scale,translateX,translateY]);
 
-  const handleZoom = useCallback((delta: number, centerX?: number, centerY?: number) => {
-    const newScale = Math.max(0.2, Math.min(3, scale + delta)); if (newScale === scale) return;
-    const rect = svgRef.current?.getBoundingClientRect();
-    const zoomCenterX = centerX ?? (rect ? rect.width/2 : containerWidth/2);
-    const zoomCenterY = centerY ?? (rect ? rect.height/2 : containerHeight/2);
-    const scaleFactor = newScale / scale;
-    const newTranslateX = zoomCenterX + (translateX - zoomCenterX) * scaleFactor;
-    const newTranslateY = zoomCenterY + (translateY - zoomCenterY) * scaleFactor;
-    setScale(newScale); setTranslateX(newTranslateX); setTranslateY(newTranslateY);
-  }, [scale, translateX, translateY]);
+  const [lastMouse,setLastMouse]=useState({x:0,y:0});
+  const handleWheel = useCallback((e:React.WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  const handleMouseDown = useCallback((e:React.MouseEvent)=>{ setIsDragging(true); setLastMouse({x:e.clientX,y:e.clientY}); },[]);
+  const handleMouseMove = useCallback((e:React.MouseEvent)=>{ if(!isDragging) return; const dx=e.clientX-lastMouse.x; const dy=e.clientY-lastMouse.y; setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x:e.clientX,y:e.clientY}); },[isDragging,lastMouse]);
+  const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
+  const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
-  const [lastMouse, setLastMouse] = useState({x:0, y:0});
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault(); const rect = svgRef.current?.getBoundingClientRect(); if (!rect) return;
-    const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top; const delta = e.deltaY > 0 ? -0.1 : 0.1; handleZoom(delta, mouseX, mouseY);
-  }, [handleZoom]);
-
-  const pickStationAt = useCallback((sx:number, sy:number)=>{
-    const {x,y} = screenToWorld(sx, sy);
-    let best: {name:string; d:number} | null = null;
-    for(const name of stations){ const p = pos[name]; const d = Math.hypot(p.x-x, p.y-y); if(best==null || d<best.d) best={name, d}; }
-    if(best && best.d <= 12) return best.name;
-    return null;
-  },[pos, screenToWorld]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if(editMode){
-      const picked = pickStationAt(e.clientX, e.clientY);
-      if(picked){ setSelected(picked); setDragStation(picked); return; }
-    }
-    setIsDragging(true);
-    setLastMouse({x: e.clientX, y: e.clientY});
-  }, [editMode, pickStationAt]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if(dragStation){
-      const {x,y} = screenToWorld(e.clientX, e.clientY);
-      const step = halfSnap ? GRID/2 : GRID;
-      const nx = snap(x, step); const ny = snap(y, step);
-      setPos(prev=>{ const next={...prev, [dragStation]: {x:nx, y:ny} }; saveOverrides(next); return next; });
-      return;
-    }
-    if (!isDragging) return;
-    const dx = e.clientX - lastMouse.x; const dy = e.clientY - lastMouse.y;
-    setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x: e.clientX, y: e.clientY});
-  }, [dragStation, halfSnap, isDragging, lastMouse, screenToWorld, saveOverrides]);
-
-  const handleMouseUp = useCallback(() => { setIsDragging(false); setDragStation(null); }, []);
-
-  const resetView = useCallback(() => { setScale(0.6); setTranslateX(300); setTranslateY(150); }, []);
-
-  const resetOverrides = useCallback(()=>{
-    localStorage.removeItem(STORAGE_KEY);
-    setPos({...BASE_POS});
-  },[]);
-
-  const importJSON = useCallback(()=>{
-    const raw = prompt('Вставь JSON с оверрайдами позиций ("{"Город":{"x":..,"y":..}, ...}")');
-    if(!raw) return;
-    try{ const obj = JSON.parse(raw) as Record<string,XY>; const next={...pos, ...obj}; setPos(next); saveOverrides(next); }
-    catch{ alert('Не удалось распарсить JSON'); }
-  },[pos, saveOverrides]);
-
-  const exportJSON = useCallback(()=>{
-    const diff: Record<string,XY> = {};
-    for(const k of stations){ const b=BASE_POS[k]; const n=pos[k]; if(!b||!n) continue; if(b.x!==n.x||b.y!==n.y) diff[k]={x:n.x,y:n.y}; }
-    const txt = JSON.stringify(diff, null, 2);
-    prompt('Скопируй JSON оверрайдов:', txt);
-  },[pos]);
-
-  const overridesCount = useMemo(()=>{
-    let n=0; for(const k of stations){ const b=BASE_POS[k], p=pos[k]; if(!b||!p) continue; if(b.x!==p.x||b.y!==p.y) n++; } return n;
-  },[pos]);
-
-  // Самодиагностика
   const selfTest = useMemo(()=>{
-    const errors: string[] = [];
-    const warns: string[] = [];
-    for(const k of stations){ const p = pos[k]; if(!p || typeof p.x!=="number" || typeof p.y!=="number") errors.push(`Нет координат для ${k}`); }
-    for(const L of LINES){ if(!L || !Array.isArray(L.path)) { errors.push(`Линия ${L?.id ?? '<?>'} без корректного path`); continue; } if(L.path.length<2) errors.push(`Линия ${L.id} слишком короткая`); }
-    for(const k of stations){ const p=pos[k]; if(Number.isNaN(p.x) || Number.isNaN(p.y)) errors.push(`NaN координаты у ${k}`); }
-
-    const expectPath = (id:string, from:string, to:string, minLen:number)=>{
-      const line = LINES.find(l=>l && l.id===id);
-      if(!line) { errors.push(`Не найдена линия ${id}`); return; }
-      if(line.path[0] !== from || line.path[line.path.length-1] !== to){ errors.push(`Линия ${id} должна идти ${from}→${to}, сейчас ${line.path[0]}→${line.path[line.path.length-1]}`); }
-      if(line.path.length < minLen){ errors.push(`Линия ${id} слишком короткая (ожидали ≥${minLen})`); }
-    };
-
-    // Проверки
-    expectPath('MSK-NCH-SALAD','Москва','Набережные Челны', 6);
-    expectPath('OMSK-NCH-IZH','Омск','Набережные Челны', 4);
-    expectPath('OMSK-NCH-UFA','Омск','Набережные Челны', 5);
-    expectPath('MSK-RST','Москва','Владикавказ', 5);
-    expectPath('MSK-VLG','Москва','Элиста', 2);
-    expectPath('SRG-EKB','Сургут','Екатеринбург', 3);
-    expectPath('EKB-MSK-KIR','Екатеринбург','Москва', 5);
-    expectPath('EKB-MSK-IZH','Екатеринбург','Москва', 8);
-    expectPath('MSK-MUR-SPB','Москва','Мурманск', 5);
-    expectPath('MSK-MUR-YAR','Москва','Мурманск', 4);
-    expectPath('RST-KRD-CRIMEA','Ростов-на-Дону','Севастополь', 4);
-    expectPath('RST-MAR-CRIMEA','Волгоград','Севастополь', 4);
-    expectPath('VLG-ELI-GRZ-MAH','Элиста','Махачкала', 3);
-    expectPath('VLG-ELI-AST-MAH','Элиста','Махачкала', 2);
-    expectPath('VLG-ELI-CAUC-PURPLE','Волгоград','Владикавказ', 5);
-    expectPath('MSK-ORSK','Москва','Орск', 5);
-    expectPath('NRG-SRG','Новый Уренгой','Сургут', 2);
-    expectPath('KHM-SRG','Ханты-Мансийск','Сургут', 2);
-    expectPath('NVV-SRG','Нижневартовск','Сургут', 2);
-    expectPath('NSK-GALT','Новосибирск','Горно-Алтайск', 4);
-    expectPath('TOM-NOVK','Томск','Новокузнецк', 3);
-    expectPath('KRS-KYZ','Красноярск','Кызыл', 3);
-    expectPath('CHT-MAG','Сковородино','Магадан', 3);
-    expectPath('OMSK-VVO','Омск','Владивосток', 8);
-    expectPath('OMSK-VVO-GREY','Омск','Владивосток', 8);
-    expectPath('OMSK-VLG-GREY','Омск','Волгоград', 6);
-    expectPath('SRT-VRN-RST','Саратов','Ростов-на-Дону', 3);
-
-    // Стиль/цвет серых веток
-    const expectStyle = (id:string, style:LineStyle)=>{ const line = LINES.find(l=>l && l.id===id); if(!line){ errors.push(`Не найдена линия ${id}`); return; } if(line.style!==style){ errors.push(`Линия ${id} должна быть style=${style}, сейчас ${line.style}`); } };
-    const expectColor = (id:string, color:string)=>{ const col = COLOR_OVERRIDES[id]; if(col!==color){ warns.push(`Цвет линии ${id} ожидается ${color}, сейчас ${col ?? 'по умолчанию'}`); } };
-    expectStyle('SRT-VRN-RST','dashed'); expectColor('SRT-VRN-RST','#BDBDBD');
-    expectStyle('RST-MAR-CRIMEA','dashed'); expectColor('RST-MAR-CRIMEA','#BDBDBD');
-    expectStyle('RST-KRD-CRIMEA','dotted'); expectColor('RST-KRD-CRIMEA','#BDBDBD');
-
-    // Север на Мурманск — один цвет, разные стили
-    expectStyle('MSK-MUR-SPB','dashed');
-    expectStyle('MSK-MUR-YAR','dotted');
-    if ((COLOR_OVERRIDES['MSK-MUR-SPB'] ?? '') !== (COLOR_OVERRIDES['MSK-MUR-YAR'] ?? '')) {
-      warns.push('MSK-MUR-SPB и MSK-MUR-YAR должны быть одного цвета');
-    }
-
-    // Удалённые линии не должны присутствовать
-    if(LINES.some(l=>l && l.id==='KRD-RST')) errors.push('KRD-RST должна быть удалена, но всё ещё присутствует');
-    if(LINES.some(l=>l && l.id==='NSK-RST-SOUTH')) errors.push('NSK-RST-SOUTH должна быть удалена, но всё ещё присутствует');
-
-    return {errors, warns};
-  },[pos]);
+    const errors:string[]=[];
+    for(const l of LINES){ if(l.path.length<2) errors.push(`Линия ${l.id} слишком короткая`); for(const n of l.path){ if(!pos[n]) errors.push(`Нет координат для ${n}`); }}
+    return {errors};
+  },[]);
 
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
       <div className="bg-white border-b p-3 flex items-center gap-2">
-        <h1 className="text-xl font-semibold text-gray-800">Карта веток по эталонным точкам</h1>
+        <h1 className="text-xl font-semibold text-gray-800">Карта коридоров</h1>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <button onClick={() => handleZoom(0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">+</button>
-          <button onClick={() => handleZoom(-0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">−</button>
+          <button onClick={()=>handleZoom(0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">+</button>
+          <button onClick={()=>handleZoom(-0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">−</button>
           <button onClick={resetView} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded">Сброс вида</button>
-
-          <label className="flex items-center gap-1 text-sm ml-2">
-            <input type="checkbox" checked={editMode} onChange={e=>setEditMode(e.target.checked)} /> Режим правки
-          </label>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={halfSnap} onChange={e=>setHalfSnap(e.target.checked)} /> Привязка GRID/2
-          </label>
-          <label className="flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={showGrid} onChange={e=>setShowGrid(e.target.checked)} /> Показать сетку
-          </label>
-
-          <button onClick={exportJSON} className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded">Экспорт</button>
-          <button onClick={importJSON} className="px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white text-sm rounded">Импорт</button>
-          <button onClick={resetOverrides} className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded">Сброс правок</button>
-          <div className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">Правок: {overridesCount}</div>
         </div>
       </div>
 
       <div className="flex">
-        {/* Легенда */}
         <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
-          <h3 className="font-bold text-base mb-2 text-gray-800">Ветки и стили</h3>
-          <LegendControls LINES={LINES} visible={visible} toggleLine={toggleLine} soloLine={soloLine} showAll={showAll} hideAll={hideAll} invertAll={invertAll} />
-
+          <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
+          <CorridorLegend corridors={CORRIDORS} groups={CORRIDOR_GROUPS} visible={visible} toggleLine={toggleLine} toggleCorridor={toggleCorridor} showAll={showAll} hideAll={hideAll} invertAll={invertAll} />
           <div className="mt-4 border-t pt-3 text-xs">
             <div className="font-semibold text-gray-800 mb-1">Статус</div>
-            {selfTest.errors.length>0 || selfTest.warns.length>0 ? (
-              <div className="space-y-2">
-                {selfTest.errors.length>0 && (
-                  <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
-                    {selfTest.errors.map((e,i)=>(<div key={i}>• {e}</div>))}
-                  </div>
-                )}
-                {selfTest.warns.length>0 && (
-                  <div className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-700 space-y-1">
-                    {selfTest.warns.map((w,i)=>(<div key={i}>• {w}</div>))}
-                  </div>
-                )}
+            {selfTest.errors.length>0 ? (
+              <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
+                {selfTest.errors.map((e,i)=>(<div key={i}>• {e}</div>))}
               </div>
             ) : (
               <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">✓ Проверки пройдены</div>
             )}
           </div>
-
-          <PointEditor stations={stations} pos={pos} setPos={setPos} saveOverrides={saveOverrides} halfSnap={halfSnap} />
         </div>
 
-        {/* Карта */}
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
             width={containerWidth}
             height={containerHeight}
             onWheel={handleWheel}
-            onMouseDown={(e)=>{ if((e.target as HTMLElement).tagName==='svg') setSelected(null); handleMouseDown(e); }}
+            onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{ cursor: dragStation? 'grabbing' : (isDragging ? 'grabbing' : 'grab') }}
+            style={{cursor:isDragging?'grabbing':'grab'}}
             className="select-none w-full h-screen"
           >
             <rect width="100%" height="100%" fill="#fafafa" />
-
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              {showGrid && <Grid />}
+              <Grid />
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
-              <StationsAndLabels stations={stations} pos={pos} labels={labels} editMode={editMode} selected={selected} setSelected={setSelected} />
+              <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
         </div>
@@ -528,109 +328,80 @@ export default function MetroBranches(){
 }
 
 function Grid(){
-  const lines: JSX.Element[] = [];
-  const minX = -800, maxX = 3200, minY = -200, maxY = 2000;
-  for(let x=minX; x<=maxX; x+=GRID){ lines.push(<line key={`gx${x}`} x1={x} y1={minY} x2={x} y2={maxY} stroke="#e5e7eb" strokeWidth={1} />); }
-  for(let y=minY; y<=maxY; y+=GRID){ lines.push(<line key={`gy${y}`} x1={minX} y1={y} x2={maxX} y2={y} stroke="#e5e7eb" strokeWidth={1} />); }
+  const lines:JSX.Element[]=[];
+  const minX=-800,maxX=3200,minY=-200,maxY=2000;
+  for(let x=minX;x<=maxX;x+=GRID){ lines.push(<line key={`gx${x}`} x1={x} y1={minY} x2={x} y2={maxY} stroke="#e5e7eb" strokeWidth={1} />); }
+  for(let y=minY;y<=maxY;y+=GRID){ lines.push(<line key={`gy${y}`} x1={minX} y1={y} x2={maxX} y2={y} stroke="#e5e7eb" strokeWidth={1} />); }
   return <g>{lines}</g>;
 }
 
-function RouteLines({lines, pos, allLines}:{lines:LineDef[]; pos:Record<string,XY>; allLines:LineDef[]}){
-  const elems: JSX.Element[] = [];
-  const offsetStep = 10;
-  const grouped = new Map<string, Array<{a:string;b:string;lineId:string}>>();
+function RouteLines({lines,pos,allLines}:{lines:LineDef[]; pos:Record<string,XY>; allLines:LineDef[]}){
+  const elems:JSX.Element[]=[]; const offsetStep=10; const grouped=new Map<string,Array<{a:string;b:string;lineId:string}>>();
   lines.flatMap(l=>buildEdges(l)).forEach(e=>{ const k=edgeKey(e.a,e.b); if(!grouped.has(k)) grouped.set(k,[]); grouped.get(k)!.push(e); });
-  grouped.forEach((arr, k)=>{
-    const A = pos[arr[0].a]; const B = pos[arr[0].b]; if(!A||!B) return;
-    const {px,py} = unitPerp(A.x,A.y,B.x,B.y);
-    const sorted = [...arr].sort((x,y)=>x.lineId.localeCompare(y.lineId));
-    const n = sorted.length;
-    sorted.forEach((e, idx)=>{
-      const a = pos[e.a], b = pos[e.b]; if(!a||!b) return;
-      const off = (idx - (n-1)/2) * offsetStep; const x1=a.x+px*off, y1=a.y+py*off; const x2=b.x+px*off, y2=b.y+py*off;
-      const line = allLines.find(L=>L.id===e.lineId)!; const dash = line.style==='solid'? undefined : (line.style==='dashed'? '12 8' : '3 7');
-      elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={line.color} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} opacity={0.95} />);
-    });
+  grouped.forEach((arr,k)=>{
+    const A=pos[arr[0].a]; const B=pos[arr[0].b]; if(!A||!B) return; const {px,py}=unitPerp(A.x,A.y,B.x,B.y); const sorted=[...arr].sort((x,y)=>x.lineId.localeCompare(y.lineId)); const n=sorted.length;
+    sorted.forEach((e,idx)=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return; const off=(idx-(n-1)/2)*offsetStep; const x1=a.x+px*off, y1=a.y+py*off, x2=b.x+px*off, y2=b.y+py*off; const line=allLines.find(L=>L.id===e.lineId)!; const dash=line.style==='solid'?undefined:(line.style==='dashed'?'12 8':'3 7'); elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={line.color} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} opacity={0.95} />); });
   });
   return <>{elems}</>;
 }
 
-function StationsAndLabels({stations, pos, labels, editMode, selected, setSelected}:{stations:string[]; pos:Record<string,XY>; labels:Record<string,any>; editMode:boolean; selected:string|null; setSelected:(s:string|null)=>void;}){
+function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<string,XY>; labels:Record<string,any>}){
   return <>
-    {stations.map(name=>{
-      const p = pos[name]; const isSelected = selected===name;
-      return (
-        <g key={name}>
-          {isSelected && (<circle cx={p.x} cy={p.y} r={10} fill="none" stroke="#22c55e" strokeWidth={2} strokeDasharray="4 4" />)}
-          <circle cx={p.x} cy={p.y} r={5} fill="#fff" stroke={isSelected? "#22c55e" : "#111"} strokeWidth={isSelected? 3 : 2} />
-        </g>
-      );
-    })}
-
-    {stations.map(name=>{
-      const p = pos[name]; const lab = labels[name]; const {w,h} = estimateTextSize(name, 13);
-      return (
-        <g key={`${name}_lab`} onMouseDown={(e)=>{ if(!editMode) return; setSelected(name); e.stopPropagation(); }}>
-          <rect x={lab.anchor==='start'? lab.x-4 : lab.x-w-4} y={lab.y-h-2} width={w+8} height={h+4} fill="rgba(255,255,255,0.95)" stroke="#e5e7eb" strokeWidth={1} rx={4} ry={4} />
-          <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
-        </g>
-      );
-    })}
+    {stations.map(name=>{ const p=pos[name]; return (<g key={name}><circle cx={p.x} cy={p.y} r={5} fill="#fff" stroke="#111" strokeWidth={2} /></g>); })}
+    {stations.map(name=>{ const p=pos[name]; const lab=labels[name]; const {w,h}=estimateTextSize(name,13); return (
+      <g key={`${name}_lab`}>
+        <rect x={lab.anchor==='start'?lab.x-4:lab.x-w-4} y={lab.y-h-2} width={w+8} height={h+4} fill="rgba(255,255,255,0.95)" stroke="#e5e7eb" strokeWidth={1} rx={4} ry={4} />
+        <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
+      </g>); })}
   </>;
 }
 
-function PointEditor({stations, pos, setPos, saveOverrides, halfSnap}:{stations:string[]; pos:Record<string,XY>; setPos:React.Dispatch<React.SetStateAction<Record<string,XY>>>; saveOverrides:(n:Record<string,XY>)=>void; halfSnap:boolean;}){
-  const [selected, setSelected] = useState<string>('');
-  return (
-    <div className="mt-4 border-t pt-3">
-      <h4 className="font-semibold text-gray-800 text-sm mb-2">Настройка точки</h4>
-      <select value={selected} onChange={e=>setSelected(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
-        <option value="">— не выбрано —</option>
-        {stations.sort().map(n=> (<option key={n} value={n}>{n}</option>))}
-      </select>
-      {selected && (
-        <div className="mt-2 space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <label className="w-16 text-gray-600">X</label>
-            <input type="number" className="flex-1 border rounded px-2 py-1" value={pos[selected].x} onChange={e=>{ const v=Number(e.target.value); setPos(prev=>{ const next={...prev, [selected]:{...prev[selected], x:v}}; saveOverrides(next); return next; }); }} />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="w-16 text-gray-600">Y</label>
-            <input type="number" className="flex-1 border rounded px-2 py-1" value={pos[selected].y} onChange={e=>{ const v=Number(e.target.value); setPos(prev=>{ const next={...prev, [selected]:{...prev[selected], y:v}}; saveOverrides(next); return next; }); }} />
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="px-2 py-1 bg-gray-200 rounded" onClick={()=>{ const step = halfSnap? GRID/2: GRID; setPos(prev=>{ const p = prev[selected!]; const nx=Math.round(p.x/step)*step, ny=Math.round(p.y/step)*step; const next={...prev, [selected!]:{x:nx,y:ny}}; saveOverrides(next); return next; }); }}>Снап к сетке</button>
-            <button className="px-2 py-1 bg-gray-200 rounded" onClick={()=>{ setPos(prev=>{ const next={...prev, [selected!]: {...BASE_POS[selected!]}}; saveOverrides(next); return next; }); }}>Сбросить к эталону</button>
-          </div>
-        </div>
-      )}
+function CorridorLegend({corridors,groups,visible,toggleLine,toggleCorridor,showAll,hideAll,invertAll}:{corridors:Corridor[]; groups:Record<string,string[]>; visible:Record<string,boolean>; toggleLine:(id:string)=>void; toggleCorridor:(id:string)=>void; showAll:()=>void; hideAll:()=>void; invertAll:()=>void;}){
+  const activeCount = Object.keys(visible).filter(id=>visible[id]!==false).length;
+  return (<>
+    <div className="flex items-center gap-2 text-xs mb-2">
+      <button onClick={showAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Показать все</button>
+      <button onClick={hideAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Скрыть все</button>
+      <button onClick={invertAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Инвертировать</button>
+      <div className="ml-auto text-gray-600">Видно: {activeCount}/{Object.keys(visible).length}</div>
     </div>
-  );
+    <div className="space-y-3">
+      {corridors.map(c=>{
+        const ids=groups[c.id]; const allOn=ids.every(id=>visible[id]!==false); const someOn=ids.some(id=>visible[id]!==false);
+        return (
+          <div key={c.id} className="text-sm">
+            <div className="flex items-center gap-2" style={{opacity: someOn?1:0.4}}>
+              <input type="checkbox" checked={allOn} ref={el=>{if(el) el.indeterminate=!allOn && someOn;}} onChange={()=>toggleCorridor(c.id)} />
+              <div className="w-4 h-4" style={{background:c.color}} />
+              <div className="font-medium">{c.name}{c.variants.length>0?` (${c.variants.length} вариант${c.variants.length>1?'ов':''})`:''}</div>
+            </div>
+            <div className="ml-6 mt-1 space-y-1">
+              {c.trunk.length>=2 && (
+                <div className="flex items-center gap-2" style={{opacity:visible[`${c.id}-trunk`]!==false?1:0.4}}>
+                  <input type="checkbox" checked={visible[`${c.id}-trunk`]!==false} onChange={()=>toggleLine(`${c.id}-trunk`)} />
+                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:'solid'}} />
+                  <div className="text-xs">Ствол</div>
+                </div>
+              )}
+              {c.variants.map(v=> (
+                <div key={v.id} className="flex items-center gap-2" style={{opacity:visible[`${c.id}-var-${v.id}`]!==false?1:0.4}}>
+                  <input type="checkbox" checked={visible[`${c.id}-var-${v.id}`]!==false} onChange={()=>toggleLine(`${c.id}-var-${v.id}`)} />
+                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:v.style==='solid'?'solid':(v.style==='dashed'?'dashed':'dotted')}} />
+                  <div className="text-xs" title={v.path.join(' → ')}>{v.name}</div>
+                </div>
+              ))}
+              {c.feeders?.map(f=> (
+                <div key={f.id} className="flex items-center gap-2" style={{opacity:visible[`${c.id}-fd-${f.id}`]!==false?1:0.4}}>
+                  <input type="checkbox" checked={visible[`${c.id}-fd-${f.id}`]!==false} onChange={()=>toggleLine(`${c.id}-fd-${f.id}`)} />
+                  <div className="w-8 h-0 border-b-4" style={{borderColor:c.color,borderBottomStyle:f.style==='dashed'?'dashed':(f.style==='dotted'?'dotted':'solid')}} />
+                  <div className="text-xs" title={f.path.join(' → ')}>{f.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </>);
 }
 
-function LegendControls({LINES, visible, toggleLine, soloLine, showAll, hideAll, invertAll}:{LINES:LineDef[]; visible:Record<string,boolean>; toggleLine:(id:string)=>void; soloLine:(id:string)=>void; showAll:()=>void; hideAll:()=>void; invertAll:()=>void;}){
-  const activeCount = LINES.filter(l=> visible[l.id] !== false).length;
-  return (
-    <>
-      <div className="flex items-center gap-2 text-xs mb-2">
-        <button onClick={showAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Показать все</button>
-        <button onClick={hideAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Скрыть все</button>
-        <button onClick={invertAll} className="px-2 py-0.5 border rounded hover:bg-gray-50">Инвертировать</button>
-        <div className="ml-auto text-gray-600">Видно: {activeCount}/{LINES.length}</div>
-      </div>
-      <div className="space-y-2">
-        {LINES.map(l=> {
-          const isOn = visible[l.id] !== false;
-          return (
-            <div key={l.id} className="flex items-center gap-2 text-sm" style={{opacity: isOn ? 1 : 0.4}}>
-              <input type="checkbox" checked={isOn} onChange={()=>toggleLine(l.id)} />
-              <div className="w-8 h-0 border-b-4" style={{borderColor: l.color, borderBottomStyle: l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
-              <div className="font-medium text-xs" title={(l.path||[]).join(' → ')}>{l.name}</div>
-              <button onClick={()=>soloLine(l.id)} className="ml-auto px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}

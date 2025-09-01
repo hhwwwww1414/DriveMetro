@@ -179,6 +179,24 @@ export default function MetroBranches(){
   });
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
   const activeLines = useMemo(()=> LINES.filter(l=> visible[l.id]!==false), [visible]);
+  const toggleLine = useCallback((id:string)=>{ setVisible(v=>({...v,[id]:!(v[id]!==false)})); },[]);
+  const toggleCorridor = useCallback((cid:string)=>{
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(v=>{
+      const allOn = ids.every(id=>v[id]!==false);
+      const next={...v};
+      ids.forEach(id=>next[id]=!allOn);
+      return next;
+    });
+  },[]);
+  const soloCorridor = useCallback((cid:string)=>{
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(()=>{
+      const next:Record<string,boolean>={};
+      for(const l of LINES){ next[l.id] = ids.includes(l.id); }
+      return next;
+    });
+  },[]);
 
   const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
@@ -200,12 +218,13 @@ export default function MetroBranches(){
   const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
   const findLineBySegment = useCallback((segId:string) => LINES.find(l=>l.segments.includes(segId)), []);
   const pathEdges = useMemo(() => {
-    return pathSegments.map(segId => {
-      const seg = getSegment(segId);
+    return pathSegments.map((segId,i) => {
       const line = findLineBySegment(segId);
-      return seg && line ? {a: seg.from, b: seg.to, color: line.color, lineId: line.id} : undefined;
+      const a = pathInfo.path[i];
+      const b = pathInfo.path[i+1];
+      return line && a && b ? {a, b, color: line.color, lineId: line.id} : undefined;
     }).filter(Boolean) as Array<{a:string;b:string;color:string;lineId:string}>;
-  }, [pathSegments, findLineBySegment]);
+  }, [pathSegments, findLineBySegment, pathInfo.path]);
   const routeDetails = useMemo(() => {
     if(pathSegments.length===0) return [] as Array<{line:LineDef|undefined; stations:string[]}>;
     const groups:Array<{line:LineDef|undefined; stations:string[]}> = [];
@@ -231,12 +250,6 @@ export default function MetroBranches(){
   const handleBuild = useCallback(() => {
     if(pathEdges.length===0) return;
     setBuilt(true);
-    const lineSet = new Set(pathEdges.map(e=>e.lineId));
-    setVisible(() => {
-      const v:Record<string,boolean>={};
-      for(const l of LINES) v[l.id] = lineSet.has(l.id);
-      return v;
-    });
   }, [pathEdges]);
 
   const handleReset = useCallback(() => {
@@ -244,11 +257,6 @@ export default function MetroBranches(){
     setStartStation('');
     setEndStation('');
     setPathIndex(0);
-    setVisible(() => {
-      const v:Record<string,boolean>={};
-      for(const l of LINES) v[l.id]=true;
-      return v;
-    });
     setAnimating(false);
   }, []);
 
@@ -323,6 +331,10 @@ export default function MetroBranches(){
       </div>
 
       <div className="flex">
+        <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
+          <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
+          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
+        </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
@@ -339,7 +351,7 @@ export default function MetroBranches(){
             <rect width="100%" height="100%" fill="#fafafa" />
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Grid />
-              <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
+              {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
               {built && pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
@@ -432,4 +444,46 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
         <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
       </g>); })}
   </>;
+}
+
+function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
+  return (
+    <>
+      <div className="flex items-center gap-2 text-xs mb-2">
+        <div className="ml-auto text-gray-600">Коридоров: {CORRIDORS.length}</div>
+      </div>
+      <div className="space-y-3">
+        {CORRIDORS.map(c=>{
+          const ids = c.lineIds.filter(id => LINES.some(l=>l.id===id));
+          const onCount = ids.filter(id => visible[id] !== false).length;
+          const allOn = onCount===ids.length && ids.length>0;
+          const someOn = onCount>0 && onCount<ids.length;
+          return (
+            <div key={c.id} className="border rounded p-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={allOn} ref={el=>{ if(el) (el as HTMLInputElement).indeterminate = someOn; }} onChange={()=>toggleCorridor(c.id)} />
+                <div className="w-3 h-3 rounded" style={{background:c.color ?? '#999'}} />
+                <div className="font-semibold text-xs">{c.name}</div>
+                <div className="ml-auto text-xs text-gray-600">{onCount}/{ids.length}</div>
+                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
+              </div>
+              <div className="mt-2 space-y-1">
+                {ids.map(id=>{
+                  const l = LINES.find(x=>x.id===id)!;
+                  const isOn = visible[id] !== false;
+                  return (
+                    <div key={id} className="flex items-center gap-2 text-xs" style={{opacity:isOn?1:0.4}}>
+                      <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
+                      <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
+                      <div title={l.name}>{l.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
 }

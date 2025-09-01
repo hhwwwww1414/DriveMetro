@@ -126,3 +126,47 @@ export function stationsFromSegments(ids: string[]): string[] {
   }
   return result;
 }
+
+function buildGraph(){
+  const graph = new Map<string, Array<{to: string; weight: number}>>();
+  segmentMap.forEach(seg => {
+    const aPos = BASE_POS[seg.from];
+    const bPos = BASE_POS[seg.to];
+    if(!aPos || !bPos) return;
+    const len = seg.length ?? Math.hypot(aPos.x - bPos.x, aPos.y - bPos.y);
+    if(!graph.has(seg.from)) graph.set(seg.from, []);
+    if(!graph.has(seg.to)) graph.set(seg.to, []);
+    graph.get(seg.from)!.push({to: seg.to, weight: len});
+    graph.get(seg.to)!.push({to: seg.from, weight: len});
+  });
+  return graph;
+}
+
+export function findPaths(start: string, end: string, limit = 3): Array<{ path: string[]; length: number }> {
+  if(start === end) return [{ path: [start], length: 0 }];
+  const graph = buildGraph();
+  const results: Array<{path:string[]; length:number}> = [];
+  const queue: Array<{path:string[]; length:number}> = [{ path:[start], length:0 }];
+
+  while(queue.length > 0 && results.length < limit){
+    queue.sort((a,b)=>a.length-b.length);
+    const cur = queue.shift()!;
+    const last = cur.path[cur.path.length-1];
+    if(last === end){
+      results.push(cur);
+      continue;
+    }
+    const neigh = graph.get(last) ?? [];
+    for(const {to, weight} of neigh){
+      if(cur.path.includes(to)) continue;
+      queue.push({ path:[...cur.path, to], length: cur.length + weight });
+    }
+  }
+
+  return results;
+}
+
+export function findPath(start: string, end: string){
+  const [best] = findPaths(start, end, 1);
+  return best ?? { path: [], length: Infinity };
+}

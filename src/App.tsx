@@ -340,6 +340,7 @@ export default function MetroBranches(){
         <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-r p-3 h-screen overflow-y-auto shadow-lg">
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
           <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} showAll={showAllCorridors} hideAll={hideAllCorridors} />
+
         </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
@@ -454,7 +455,6 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
       </g>); })}
   </>;
 }
-
 function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine, showAll, hideAll}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void; showAll:()=>void; hideAll:()=>void;}){
   return (
     <>
@@ -484,6 +484,7 @@ function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorrido
                   const isOn = visible[id] !== false;
                   return (
                     <div key={id} className="flex items-center gap-2 text-xs transition-opacity" style={{opacity:isOn?1:0.4}}>
+
                       <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
                       <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
                       <div title={l.name}>{l.name}</div>

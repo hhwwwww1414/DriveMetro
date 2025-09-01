@@ -69,8 +69,8 @@ const RAW_LINES: Omit<LineDef,'color'>[] = [
   { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', segments: segmentsFromStations(route(['Омск','Тюмень','Екатеринбург','Набережные Челны']))},
   { id:'OMSK-NCH-IZH-GRAY', name:'Омск → Уфа (через Тюмень / Екатеринбург)', style:'solid', segments: segmentsFromStations(route(['Омск','Тюмень','Екатеринбург','Набережные Челны','Уфа']))},
   { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', segments: segmentsFromStations(route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']))},
-  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (серая)', style:'solid', segments: segmentsFromStations(route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
-  { id:'OMSK-VVO-SALAD', name:'Омск → Владивосток (салатовая)', style:'solid', segments: segmentsFromStations(route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
+  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (серая)', style:'solid', segments: segmentsFromStations(route(['Омск','Новосибирск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
+  { id:'OMSK-VVO-SALAD', name:'Омск → Владивосток (салатовая)', style:'solid', segments: segmentsFromStations(route(['Омск','Новосибирск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
   { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', segments: segmentsFromStations(route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']))},
   // Тёмно-коричневый северный блок
   { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', segments: segmentsFromStations(route(['Сургут','Тюмень','Екатеринбург']))},
@@ -213,6 +213,27 @@ export default function MetroBranches(){
 
   const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
   const pathEdges = useMemo(() => buildEdgesFromPath(pathInfo.path), [pathInfo.path]);
+  const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
+  const findLineBySegment = useCallback((segId:string) => LINES.find(l=>l.segments.includes(segId)), []);
+  const routeDetails = useMemo(() => {
+    if(pathSegments.length===0) return [] as Array<{line:LineDef|undefined; stations:string[]}>;
+    const groups:Array<{line:LineDef|undefined; stations:string[]}> = [];
+    let currentLine = findLineBySegment(pathSegments[0]);
+    let currentStations = [pathInfo.path[0], pathInfo.path[1]];
+    for(let i=1;i<pathSegments.length;i++){
+      const line = findLineBySegment(pathSegments[i]);
+      const station = pathInfo.path[i+1];
+      if(line && currentLine && line.id===currentLine.id){
+        currentStations.push(station);
+      }else{
+        groups.push({line: currentLine, stations: currentStations});
+        currentLine = line;
+        currentStations = [pathInfo.path[i], station];
+      }
+    }
+    groups.push({line: currentLine, stations: currentStations});
+    return groups;
+  }, [pathSegments, pathInfo.path, findLineBySegment]);
 
   const containerWidth=1200, containerHeight=800;
 
@@ -280,6 +301,20 @@ export default function MetroBranches(){
                 <div className="pt-1 space-y-1">
                   <div>Протяжённость: {Math.round(pathInfo.length)}</div>
                   <div className="text-xs text-gray-600 break-words">{pathInfo.path.join(' → ')}</div>
+                  {routeDetails.length>0 && (
+                    <ol className="mt-2 text-xs text-gray-700 list-decimal pl-4 space-y-1">
+                      {routeDetails.map((g,i)=>(
+                        <li key={i}>
+                          Проезд по ветке <span style={{color:g.line?.color}}>{g.line?.name ?? '—'}</span> от {g.stations[0]} до {g.stations[g.stations.length-1]}
+                          {g.stations.length>2 && (
+                            <div className="ml-4">
+                              {g.stations.slice(1,-1).map(s=>(<div key={s}>{s}</div>))}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
               )}
             </div>
@@ -318,7 +353,10 @@ export default function MetroBranches(){
               {pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
-                return <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeWidth={10} strokeLinecap="round" />;
+                const segId=edgeKey(e.a,e.b);
+                const line=LINES.find(l=>l.segments.includes(segId));
+                const dash=line?.style==='dashed'? '12 8' : line?.style==='dotted'? '3 7' : undefined;
+                return <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={line?.color ?? '#000'} strokeWidth={8} strokeLinecap="round" strokeDasharray={dash} />;
               })}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>

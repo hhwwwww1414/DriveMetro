@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { BASE_POS, segmentsFromStations, getSegment, type XY, buildEdgesFromPath, findPaths } from "./models/network";
+import { BASE_POS, segmentsFromStations, getSegment, type XY, findPaths } from "./models/network";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
@@ -157,6 +157,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_EAST_RED', name:'Кавказ → Тольятти(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA'] },
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_MSK_KRD', name:'Москва → Краснодар (оранжевый)', color:'#CC5500', lineIds:['MSK-RSTDN','RST-KRD'] },
+  { id:'C_MSK_VLD', name:'Москва → Владикавказ', color:'#FF8F1F', lineIds:['MSK-RST'] },
   { id:'C_MSK_ORSK', name:'Москва → Орск (серый)', color:'#BDBDBD', lineIds:['MSK-ORSK'] },
   { id:'C_MSK_SYK', name:'Москва → Сыктывкар', color:'#8B4513', lineIds:['SYK-KIR-YAR-MSK'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
@@ -178,24 +179,6 @@ export default function MetroBranches(){
   });
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
   const activeLines = useMemo(()=> LINES.filter(l=> visible[l.id]!==false), [visible]);
-  const toggleLine = useCallback((id:string)=>{ setVisible(v=>({...v,[id]:!(v[id]!==false)})); },[]);
-  const toggleCorridor = useCallback((cid:string)=>{
-    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
-    setVisible(v=>{
-      const allOn = ids.every(id=>v[id]!==false);
-      const next={...v};
-      ids.forEach(id=>next[id]=!allOn);
-      return next;
-    });
-  },[]);
-  const soloCorridor = useCallback((cid:string)=>{
-    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
-    setVisible(v=>{
-      const next:Record<string,boolean>={};
-      for(const l of LINES){ next[l.id] = ids.includes(l.id); }
-      return next;
-    });
-  },[]);
 
   const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
@@ -204,6 +187,7 @@ export default function MetroBranches(){
   const [startStation, setStartStation] = useState<string>("");
   const [endStation, setEndStation] = useState<string>("");
   const [pathIndex, setPathIndex] = useState(0);
+  const [built, setBuilt] = useState(false);
 
   const pathOptions = useMemo(() => {
     if(!startStation || !endStation) return [] as Array<{path:string[]; length:number}>;
@@ -213,9 +197,15 @@ export default function MetroBranches(){
   useEffect(() => { setPathIndex(0); }, [startStation, endStation]);
 
   const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
-  const pathEdges = useMemo(() => buildEdgesFromPath(pathInfo.path), [pathInfo.path]);
   const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
   const findLineBySegment = useCallback((segId:string) => LINES.find(l=>l.segments.includes(segId)), []);
+  const pathEdges = useMemo(() => {
+    return pathSegments.map(segId => {
+      const seg = getSegment(segId);
+      const line = findLineBySegment(segId);
+      return seg && line ? {a: seg.from, b: seg.to, color: line.color, lineId: line.id} : undefined;
+    }).filter(Boolean) as Array<{a:string;b:string;color:string;lineId:string}>;
+  }, [pathSegments, findLineBySegment]);
   const routeDetails = useMemo(() => {
     if(pathSegments.length===0) return [] as Array<{line:LineDef|undefined; stations:string[]}>;
     const groups:Array<{line:LineDef|undefined; stations:string[]}> = [];
@@ -237,7 +227,29 @@ export default function MetroBranches(){
   }, [pathSegments, pathInfo.path, findLineBySegment]);
   const [animating, setAnimating] = useState(false);
   const [animProgress, setAnimProgress] = useState(0);
+  const handleBuild = useCallback(() => {
+    if(pathEdges.length===0) return;
+    setBuilt(true);
+    const lineSet = new Set(pathEdges.map(e=>e.lineId));
+    setVisible(() => {
+      const v:Record<string,boolean>={};
+      for(const l of LINES) v[l.id] = lineSet.has(l.id);
+      return v;
+    });
+  }, [pathEdges]);
 
+  const handleReset = useCallback(() => {
+    setBuilt(false);
+    setStartStation('');
+    setEndStation('');
+    setPathIndex(0);
+    setVisible(() => {
+      const v:Record<string,boolean>={};
+      for(const l of LINES) v[l.id]=true;
+      return v;
+    });
+    setAnimating(false);
+  }, []);
   const handleGo = useCallback(() => {
     if(pathEdges.length===0) return;
     setAnimating(true);
@@ -295,19 +307,6 @@ export default function MetroBranches(){
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
-  const selfTest = useMemo(() => {
-    const errors:string[]=[];
-    for(const l of LINES){
-      if(l.segments.length<1) errors.push(`Линия ${l.id} слишком короткая`);
-      for(const sid of l.segments){
-        const seg = getSegment(sid);
-        if(!seg){ errors.push(`Нет сегмента ${sid}`); continue; }
-        if(!pos[seg.from]) errors.push(`Нет координат для ${seg.from}`);
-        if(!pos[seg.to]) errors.push(`Нет координат для ${seg.to}`);
-      }
-    }
-    return {errors};
-  },[]);
 
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
@@ -373,7 +372,6 @@ export default function MetroBranches(){
             )}
           </div>
         </div>
-
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
@@ -391,49 +389,51 @@ export default function MetroBranches(){
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Grid />
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
-              {pathEdges.map((e,i)=>{
+              {built && pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
                 return (
-                  <g key={`path_${i}`}>
-                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#fff" strokeWidth={10} strokeLinecap="round" />
-                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeWidth={6} strokeLinecap="round" />
-                  </g>
+
+                  <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={e.color} strokeWidth={8} strokeLinecap="round" />
                 );
               })}
-              {vehiclePos && (
-                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={20} textAnchor="middle" dominantBaseline="middle">🚚</text>
+              {animating && vehiclePos && (
+                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={40} textAnchor="middle" dominantBaseline="middle">🚚</text>
               )}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
         </div>
-
-        <div className="w-80 bg-white border-l p-3 h-screen overflow-y-auto">
-          <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
+        <div className="w-80 bg-white border-l p-3 h-screen overflow-y-auto relative">
+          {built && (
+            <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
+          )}
           <div className="space-y-2 text-sm">
-            <select value={startStation} onChange={e=>setStartStation(e.target.value)} className="w-full border p-1 rounded">
-              <option value="">Начальная станция</option>
+            <select value={startStation} onChange={e=>setStartStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
+              <option value="">🚩 Откуда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
-            <select value={endStation} onChange={e=>setEndStation(e.target.value)} className="w-full border p-1 rounded">
-              <option value="">Конечная станция</option>
+            <select value={endStation} onChange={e=>setEndStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
+              <option value="">🏁 Куда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
-            {pathOptions.length>1 && (
+            {pathOptions.length>1 && !built && (
               <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
                 {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
               </select>
             )}
-            {pathInfo.path.length>1 && (
+            {!built && startStation && endStation && (
+              <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1">Проложить</button>
+            )}
+            {built && pathInfo.path.length>1 && (
               <div className="pt-1 space-y-2">
-                <div className="font-medium">Протяжённость: {Math.round(pathInfo.length)}</div>
+                <div>📏 {Math.round(pathInfo.length)}</div>
                 <div className="space-y-2">
                   {routeDetails.map((g,i)=>(
                     <div key={i} className="flex items-start gap-2 border rounded p-2">
                       <div className="w-2 rounded" style={{background:g.line?.color}} />
                       <div className="flex-1">
-                        <div className="font-medium">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
+                        <div className="text-xs">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
                         {g.stations.length>2 && (
                           <div className="text-xs text-gray-600">{g.stations.slice(1,-1).join(' → ')}</div>
                         )}
@@ -441,8 +441,10 @@ export default function MetroBranches(){
                     </div>
                   ))}
                 </div>
-                {!animating && (
+                {!animating ? (
                   <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1">Поехали</button>
+                ) : (
+                  <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1">Стоп</button>
                 )}
               </div>
             )}
@@ -482,44 +484,3 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
   </>;
 }
 
-function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
-  return (
-    <>
-      <div className="flex items-center gap-2 text-xs mb-2">
-        <div className="ml-auto text-gray-600">Коридоров: {CORRIDORS.length}</div>
-      </div>
-      <div className="space-y-3">
-        {CORRIDORS.map(c=>{
-          const ids = c.lineIds.filter(id => LINES.some(l=>l.id===id));
-          const onCount = ids.filter(id => visible[id] !== false).length;
-          const allOn = onCount===ids.length && ids.length>0;
-          const someOn = onCount>0 && onCount<ids.length;
-          return (
-            <div key={c.id} className="border rounded p-2">
-              <div className="flex items-center gap-2">
-                <input type="checkbox" checked={allOn} ref={el=>{ if(el) (el as HTMLInputElement).indeterminate = someOn; }} onChange={()=>toggleCorridor(c.id)} />
-                <div className="w-3 h-3 rounded" style={{background:c.color ?? '#999'}} />
-                <div className="font-semibold text-xs">{c.name}</div>
-                <div className="ml-auto text-xs text-gray-600">{onCount}/{ids.length}</div>
-                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
-              </div>
-              <div className="mt-2 space-y-1">
-                {ids.map(id=>{
-                  const l = LINES.find(x=>x.id===id)!;
-                  const isOn = visible[id] !== false;
-                  return (
-                    <div key={id} className="flex items-center gap-2 text-xs" style={{opacity:isOn?1:0.4}}>
-                      <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
-                      <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
-                      <div title={l.name}>{l.name}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}

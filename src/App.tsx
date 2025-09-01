@@ -197,6 +197,12 @@ export default function MetroBranches(){
       return next;
     });
   },[]);
+  const showAllCorridors = useCallback(()=>{
+    setVisible(()=>{ const next:Record<string,boolean>={}; for(const l of LINES){ next[l.id]=true; } return next; });
+  },[]);
+  const hideAllCorridors = useCallback(()=>{
+    setVisible(()=>{ const next:Record<string,boolean>={}; for(const l of LINES){ next[l.id]=false; } return next; });
+  },[]);
 
   const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
@@ -324,16 +330,17 @@ export default function MetroBranches(){
       <div className="bg-white border-b p-3 flex items-center gap-2">
         <h1 className="text-xl font-semibold text-gray-800">Карта коридоров</h1>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <button onClick={()=>handleZoom(0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">+</button>
-          <button onClick={()=>handleZoom(-0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg">−</button>
-          <button onClick={resetView} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded">Сброс вида</button>
+          <button onClick={()=>handleZoom(0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg transition-colors">+</button>
+          <button onClick={()=>handleZoom(-0.15)} className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded text-lg transition-colors">−</button>
+          <button onClick={resetView} className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded transition-colors">Сброс вида</button>
         </div>
       </div>
 
       <div className="flex">
-        <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
+        <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-r p-3 h-screen overflow-y-auto shadow-lg">
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
-          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
+          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} showAll={showAllCorridors} hideAll={hideAllCorridors} />
+
         </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
@@ -355,18 +362,21 @@ export default function MetroBranches(){
               {built && pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
+                const len = Math.hypot(a.x-b.x,a.y-b.y);
                 return (
-                  <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={e.color} strokeWidth={8} strokeLinecap="round" />
+                  <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={e.color} strokeWidth={8} strokeLinecap="round" strokeDasharray={len} strokeDashoffset={len}>
+                    <animate attributeName="stroke-dashoffset" from={len} to="0" dur="0.8s" fill="freeze" />
+                  </line>
                 );
               })}
               {animating && vehiclePos && (
-                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={40} textAnchor="middle" dominantBaseline="middle">🚚</text>
+                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={40} textAnchor="middle" dominantBaseline="middle" style={{filter:'drop-shadow(0 0 2px rgba(0,0,0,0.4))'}} className="transition-transform">🚚</text>
               )}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
         </div>
-        <div className="w-80 bg-white border-l p-3 h-screen overflow-y-auto relative">
+        <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-l p-3 h-screen overflow-y-auto relative shadow-lg">
           {built && (
             <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
           )}
@@ -385,7 +395,7 @@ export default function MetroBranches(){
               </select>
             )}
             {!built && startStation && endStation && (
-              <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1">Проложить</button>
+              <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1 transition-colors">Проложить</button>
             )}
             {built && pathInfo.path.length>1 && (
               <div className="pt-1 space-y-2">
@@ -404,9 +414,9 @@ export default function MetroBranches(){
                   ))}
                 </div>
                 {!animating ? (
-                  <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1">Поехали</button>
+                  <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1 transition-colors">Поехали</button>
                 ) : (
-                  <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1">Стоп</button>
+                  <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1 transition-colors">Стоп</button>
                 )}
               </div>
             )}
@@ -430,7 +440,7 @@ function RouteLines({lines,pos,allLines}:{lines:LineDef[]; pos:Record<string,XY>
   lines.flatMap(l=>buildEdges(l)).forEach(e=>{ const k=edgeKey(e.a,e.b); if(!grouped.has(k)) grouped.set(k,[]); grouped.get(k)!.push(e); });
   grouped.forEach((arr,k)=>{
     const A=pos[arr[0].a]; const B=pos[arr[0].b]; if(!A||!B) return; const {px,py}=unitPerp(A.x,A.y,B.x,B.y); const sorted=[...arr].sort((x,y)=>x.lineId.localeCompare(y.lineId)); const n=sorted.length;
-    sorted.forEach((e,idx)=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return; const off=(idx-(n-1)/2)*offsetStep; const x1=a.x+px*off, y1=a.y+py*off, x2=b.x+px*off, y2=b.y+py*off; const line=allLines.find(L=>L.id===e.lineId)!; const dash=line.style==='solid'?undefined:(line.style==='dashed'?'12 8':'3 7'); elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={line.color} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} opacity={0.95} />); });
+    sorted.forEach((e,idx)=>{ const a=pos[e.a], b=pos[e.b]; if(!a||!b) return; const off=(idx-(n-1)/2)*offsetStep; const x1=a.x+px*off, y1=a.y+py*off, x2=b.x+px*off, y2=b.y+py*off; const line=allLines.find(L=>L.id===e.lineId)!; const dash=line.style==='solid'?undefined:(line.style==='dashed'?'12 8':'3 7'); elems.push(<line key={`${k}_${e.lineId}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={line.color} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} opacity={0.95} className="transition-opacity duration-300" />); });
   });
   return <>{elems}</>;
 }
@@ -445,11 +455,12 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
       </g>); })}
   </>;
 }
-
-function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
+function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine, showAll, hideAll}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void; showAll:()=>void; hideAll:()=>void;}){
   return (
     <>
-      <div className="flex items-center gap-2 text-xs mb-2">
+      <div className="flex items-center gap-2 text-xs mb-3">
+        <button onClick={showAll} className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded transition-colors">Показать все</button>
+        <button onClick={hideAll} className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors">Скрыть все</button>
         <div className="ml-auto text-gray-600">Коридоров: {CORRIDORS.length}</div>
       </div>
       <div className="space-y-3">
@@ -459,20 +470,21 @@ function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorrido
           const allOn = onCount===ids.length && ids.length>0;
           const someOn = onCount>0 && onCount<ids.length;
           return (
-            <div key={c.id} className="border rounded p-2">
+            <div key={c.id} className="border rounded p-2 shadow-sm hover:shadow-md transition-shadow bg-white">
               <div className="flex items-center gap-2">
                 <input type="checkbox" checked={allOn} ref={el=>{ if(el) (el as HTMLInputElement).indeterminate = someOn; }} onChange={()=>toggleCorridor(c.id)} />
                 <div className="w-3 h-3 rounded" style={{background:c.color ?? '#999'}} />
                 <div className="font-semibold text-xs">{c.name}</div>
                 <div className="ml-auto text-xs text-gray-600">{onCount}/{ids.length}</div>
-                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
+                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50 transition-colors">Solo</button>
               </div>
               <div className="mt-2 space-y-1">
                 {ids.map(id=>{
                   const l = LINES.find(x=>x.id===id)!;
                   const isOn = visible[id] !== false;
                   return (
-                    <div key={id} className="flex items-center gap-2 text-xs" style={{opacity:isOn?1:0.4}}>
+                    <div key={id} className="flex items-center gap-2 text-xs transition-opacity" style={{opacity:isOn?1:0.4}}>
+
                       <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
                       <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
                       <div title={l.name}>{l.name}</div>

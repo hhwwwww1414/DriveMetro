@@ -148,6 +148,7 @@ export function findPaths(start: string, end: string, limit = 3): Array<{ path: 
   const graph = buildGraph();
   const results: Array<{path:string[]; length:number}> = [];
   const queue: Array<{path:string[]; length:number}> = [{ path:[start], length:0 }];
+  const best = new Map<string, number>();
 
   while(queue.length > 0 && results.length < limit){
     queue.sort((a,b)=>a.length-b.length);
@@ -160,7 +161,10 @@ export function findPaths(start: string, end: string, limit = 3): Array<{ path: 
     const neigh = graph.get(last) ?? [];
     for(const {to, weight} of neigh){
       if(cur.path.includes(to)) continue;
-      queue.push({ path:[...cur.path, to], length: cur.length + weight });
+      const newLen = cur.length + weight;
+      if(best.has(to) && best.get(to)! <= newLen) continue;
+      best.set(to, newLen);
+      queue.push({ path:[...cur.path, to], length: newLen });
     }
   }
 

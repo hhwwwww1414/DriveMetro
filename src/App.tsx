@@ -457,7 +457,6 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
       </g>); })}
   </>;
 }
-
 function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine, showAll, hideAll}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void; showAll:()=>void; hideAll:()=>void;}){
   return (
     <>

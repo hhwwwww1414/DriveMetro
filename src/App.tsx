@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { BASE_POS, segmentsFromStations, getSegment, type XY, buildEdgesFromPath, findPath } from "./models/network";
+import { BASE_POS, segmentsFromStations, getSegment, type XY, buildEdgesFromPath, findPaths } from "./models/network";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
@@ -156,6 +156,8 @@ const CORRIDORS: Corridor[] = [
   { id:'C_MSK_ELI_BLUE', name:'Москва → Махачкала(M6-синий)', color:'#1A73E8', lineIds:['MSK-VLG', 'VLG-ELI-GRZ-MAH-BLUE','VLG-ELI-AST-MAH-BLUE'] },
   { id:'C_EAST_RED', name:'Кавказ → Тольятти(красный)', color:'#F40009', lineIds:['VLG-ELI-CAUC-PURPLE','VLG-ELI-GRZ-MAH','VLG-ELI-AST-MAH','VLG-SRT-UFA'] },
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
+  { id:'C_MSK_KRD', name:'Москва → Краснодар (оранжевый)', color:'#CC5500', lineIds:['MSK-RSTDN','RST-KRD'] },
+  { id:'C_MSK_ORSK', name:'Москва → Орск (серый)', color:'#BDBDBD', lineIds:['MSK-ORSK'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
   { id:'C_VOLGA_BROWN', name:'Поволжье (коричневый)', color:'#8B4513', lineIds:['YOL-CHB-NNOV-VLA-MSK','MSK-VLA-NNOV-CHB-KZN-ULY-TLT'] },
   { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['VLG-RST-PURPLE','RST-MAR-CRIMEA-PINK','RST-KRD-PURPLE','KRD-CRIMEA-PINK','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','OMSK-NCH-IZH-GRAY'] }
@@ -200,12 +202,16 @@ export default function MetroBranches(){
 
   const [startStation, setStartStation] = useState<string>("");
   const [endStation, setEndStation] = useState<string>("");
+  const [pathIndex, setPathIndex] = useState(0);
 
-  const pathInfo = useMemo(() => {
-    if(!startStation || !endStation) return { path: [], length: 0 };
-    return findPath(startStation, endStation);
+  const pathOptions = useMemo(() => {
+    if(!startStation || !endStation) return [] as Array<{path:string[]; length:number}>;
+    return findPaths(startStation, endStation, 5);
   }, [startStation, endStation]);
 
+  useEffect(() => { setPathIndex(0); }, [startStation, endStation]);
+
+  const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
   const pathEdges = useMemo(() => buildEdgesFromPath(pathInfo.path), [pathInfo.path]);
 
   const containerWidth=1200, containerHeight=800;
@@ -265,8 +271,16 @@ export default function MetroBranches(){
                 <option value="">Конечная станция</option>
                 {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
               </select>
+              {pathOptions.length>1 && (
+                <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
+                  {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
+                </select>
+              )}
               {pathInfo.path.length>1 && (
-                <div className="pt-1">Протяжённость: {Math.round(pathInfo.length)}</div>
+                <div className="pt-1 space-y-1">
+                  <div>Протяжённость: {Math.round(pathInfo.length)}</div>
+                  <div className="text-xs text-gray-600 break-words">{pathInfo.path.join(' → ')}</div>
+                </div>
               )}
             </div>
           </div>

@@ -127,9 +127,8 @@ export function stationsFromSegments(ids: string[]): string[] {
   return result;
 }
 
-export function findPath(start: string, end: string): { path: string[]; length: number } {
-  if(start === end) return { path: [start], length: 0 };
 
+function buildGraph(){
   const graph = new Map<string, Array<{to: string; weight: number}>>();
   segmentMap.forEach(seg => {
     const aPos = BASE_POS[seg.from];
@@ -141,38 +140,34 @@ export function findPath(start: string, end: string): { path: string[]; length: 
     graph.get(seg.from)!.push({to: seg.to, weight: len});
     graph.get(seg.to)!.push({to: seg.from, weight: len});
   });
+  return graph;
+}
 
-  const dist: Record<string, number> = {};
-  const prev: Record<string, string | undefined> = {};
-  const queue: Array<{node: string; dist: number}> = [];
+export function findPaths(start: string, end: string, limit = 3): Array<{ path: string[]; length: number }> {
+  if(start === end) return [{ path: [start], length: 0 }];
+  const graph = buildGraph();
+  const results: Array<{path:string[]; length:number}> = [];
+  const queue: Array<{path:string[]; length:number}> = [{ path:[start], length:0 }];
 
-  for(const name of Object.keys(BASE_POS)) dist[name] = Infinity;
-  dist[start] = 0;
-  queue.push({node: start, dist: 0});
-
-  while(queue.length > 0){
-    queue.sort((a,b) => a.dist - b.dist);
-    const {node, dist: d} = queue.shift()!;
-    if(node === end) break;
-    const neigh = graph.get(node) ?? [];
+  while(queue.length > 0 && results.length < limit){
+    queue.sort((a,b)=>a.length-b.length);
+    const cur = queue.shift()!;
+    const last = cur.path[cur.path.length-1];
+    if(last === end){
+      results.push(cur);
+      continue;
+    }
+    const neigh = graph.get(last) ?? [];
     for(const {to, weight} of neigh){
-      const nd = d + weight;
-      if(nd < (dist[to] ?? Infinity)){
-        dist[to] = nd;
-        prev[to] = node;
-        queue.push({node: to, dist: nd});
-      }
+      if(cur.path.includes(to)) continue;
+      queue.push({ path:[...cur.path, to], length: cur.length + weight });
     }
   }
 
-  if(dist[end] === Infinity) return { path: [], length: Infinity };
+  return results;
+}
 
-  const path: string[] = [];
-  let cur: string | undefined = end;
-  while(cur){
-    path.push(cur);
-    cur = prev[cur];
-  }
-  path.reverse();
-  return { path, length: dist[end] };
+export function findPath(start: string, end: string){
+  const [best] = findPaths(start, end, 1);
+  return best ?? { path: [], length: Infinity };
 }

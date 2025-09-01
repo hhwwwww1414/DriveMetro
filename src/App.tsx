@@ -320,7 +320,6 @@ export default function App(){
       </div>
 
       <div className="flex">
-
         <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
           <div className="mb-4">
             <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
@@ -373,6 +372,7 @@ export default function App(){
             )}
           </div>
         </div>
+
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
@@ -409,16 +409,30 @@ export default function App(){
             <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
           )}
           <div className="space-y-2 text-sm">
-            <select value={startStation} onChange={e=>setStartStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
+            <select
+              value={startStation}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStartStation(e.target.value)}
+              disabled={built}
+              className="w-full border p-1 rounded"
+            >
               <option value="">🚩 Откуда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
-            <select value={endStation} onChange={e=>setEndStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
+            <select
+              value={endStation}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEndStation(e.target.value)}
+              disabled={built}
+              className="w-full border p-1 rounded"
+            >
               <option value="">🏁 Куда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
             {pathOptions.length>1 && !built && (
-              <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
+              <select
+                value={pathIndex}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPathIndex(Number(e.target.value))}
+                className="w-full border p-1 rounded"
+              >
                 {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
               </select>
             )}

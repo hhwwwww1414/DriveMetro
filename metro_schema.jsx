@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import { segmentsFromStations, getSegment, stationsFromSegments } from "./src/models/network";
 
 // ==========================
 //  Metro-style Russia map with GEO LAYOUT
@@ -11,8 +12,9 @@ import Papa from "papaparse";
 //  - Stronger station spacing (repel)
 // ==========================
 
-type LineDef = { id: string; name: string; color: string; stations: string[] };
+type LineDef = { id: string; name: string; color: string; segments: string[] };
 const SEP = " — ";
+const seg = segmentsFromStations;
 
 // === City coordinates (lon, lat). Approximations; enough for a clean metro-style layout ===
 const CITY_COORDS: Record<string, [number, number]> = {
@@ -91,83 +93,88 @@ const CITY_COORDS: Record<string, [number, number]> = {
 };
 
 // === Trunk lines & branches (added Tomsk lines) ===
-const eastwest_v1 = ["Владивосток","Хабаровск","Свободный","Сковородино","Чита","Улан-Удэ","Иркутск","Красноярск","Кемерово","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const eastwest_v2 = ["Владивосток","Хабаровск","Свободный","Сковородино","Чита","Улан-Удэ","Иркутск","Красноярск","Кемерово","Новосибирск","Омск","Курган","Челябинск","Уфа","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
+const eastwest_v1 = seg(["Владивосток","Хабаровск","Свободный","Сковородино","Чита","Улан-Удэ","Иркутск","Красноярск","Кемерово","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const eastwest_v2 = seg(["Владивосток","Хабаровск","Свободный","Сковородино","Чита","Улан-Удэ","Иркутск","Красноярск","Кемерово","Новосибирск","Омск","Курган","Челябинск","Уфа","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
 
 // Tomsk→Moscow variants (per your examples)
-const tomsk_msk_v1 = ["Томск","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const tomsk_msk_v2 = ["Томск","Новосибирск","Омск","Курган","Челябинск","Уфа","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
+const tomsk_msk_v1 = seg(["Томск","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const tomsk_msk_v2 = seg(["Томск","Новосибирск","Омск","Курган","Челябинск","Уфа","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
 
-const to_kras_v1 = ["Екатеринбург","Уфа","Тольятти","Саратов","Воронеж","Ростов-на-Дону","Краснодар"];
-const to_kras_v2 = ["Екатеринбург","Уфа","Тольятти","Саратов","Волгоград","Ростов-на-Дону","Краснодар"];
-const to_kras_v3 = ["Челябинск","Уфа","Тольятти","Саратов","Воронеж","Ростов-на-Дону","Краснодар"];
-const to_kras_v4 = ["Челябинск","Уфа","Тольятти","Саратов","Волгоград","Ростов-на-Дону","Краснодар"];
-const cauc_via_astr = ["Саратов","Волгоград","Элиста","Астрахань","Махачкала"];
-const cauc_via_footh = ["Саратов","Волгоград","Элиста","Невинномысск","Минеральные Воды","Нальчик","Владикавказ","Грозный","Махачкала"];
-const nev_series_1 = ["Волгоград","Элиста","Астрахань","Махачкала","Грозный","Владикавказ","Нальчик","Минеральные Воды","Невинномысск"];
-const nev_series_2 = ["Волгоград","Элиста","Невинномысск","Минеральные Воды","Нальчик","Владикавказ","Грозный","Махачкала"];
-const murmansk_via_spb = ["Мурманск","Медвежьегорск","Петрозаводск","Санкт-Петербург","Москва"];
-const murmansk_via_vologda = ["Мурманск","Медвежьегорск","Вологда","Ярославль","Москва"];
-const siktivkar_msk = ["Сыктывкар","Киров","Ярославль","Москва"];
-const yosh_msk = ["Йошкар-Ола","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const nurengoy_vladivostok = ["Новый Уренгой","Сургут","Тюмень","Новосибирск","Кемерово","Красноярск","Иркутск","Улан-Удэ","Чита","Сковородино","Свободный","Хабаровск","Владивосток"];
-const khm_paths_1 = ["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Пермь","Киров","Кострома","Ярославль","Москва"];
-const khm_paths_2 = ["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Пермь","Ижевск","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const khm_paths_3 = ["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const nizhnevart_paths_1 = ["Нижневартовск","Сургут","Тюмень","Екатеринбург","Пермь","Киров","Кострома","Ярославль","Москва"];
-const nizhnevart_paths_2 = ["Нижневартовск","Сургут","Тюмень","Екатеринбург","Пермь","Ижевск","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const nizhnevart_paths_3 = ["Нижневартовск","Сургут","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"];
-const abakan_branch = ["Кызыл","Абакан","Красноярск","Кемерово","Новосибирск","Барнаул"];
-const novokuz = ["Новокузнецк","Кемерово"];
-const biysk = ["Бийск","Барнаул"];
-const yakutsk = ["Якутск","Чита"];
-const kalin = ["Москва","Санкт-Петербург","Калининград"];
-const to_orsk = ["Тольятти","Оренбург","Орск"];
-const crimea_1 = ["Ростов-на-Дону","Мариуполь","Мелитополь","Симферополь","Севастополь"];
-const crimea_2 = ["Ростов-на-Дону","Краснодар","Керчь","Симферополь","Севастополь"];
-const msk_tlt = ["Москва","Рязань","Пенза","Тольятти"];
+const to_kras_v1 = seg(["Екатеринбург","Уфа","Тольятти","Саратов","Воронеж","Ростов-на-Дону","Краснодар"]);
+const to_kras_v2 = seg(["Екатеринбург","Уфа","Тольятти","Саратов","Волгоград","Ростов-на-Дону","Краснодар"]);
+const to_kras_v3 = seg(["Челябинск","Уфа","Тольятти","Саратов","Воронеж","Ростов-на-Дону","Краснодар"]);
+const to_kras_v4 = seg(["Челябинск","Уфа","Тольятти","Саратов","Волгоград","Ростов-на-Дону","Краснодар"]);
+const cauc_via_astr = seg(["Саратов","Волгоград","Элиста","Астрахань","Махачкала"]);
+const cauc_via_footh = seg(["Саратов","Волгоград","Элиста","Невинномысск","Минеральные Воды","Нальчик","Владикавказ","Грозный","Махачкала"]);
+const nev_series_1 = seg(["Волгоград","Элиста","Астрахань","Махачкала","Грозный","Владикавказ","Нальчик","Минеральные Воды","Невинномысск"]);
+const nev_series_2 = seg(["Волгоград","Элиста","Невинномысск","Минеральные Воды","Нальчик","Владикавказ","Грозный","Махачкала"]);
+const murmansk_via_spb = seg(["Мурманск","Медвежьегорск","Петрозаводск","Санкт-Петербург","Москва"]);
+const murmansk_via_vologda = seg(["Мурманск","Медвежьегорск","Вологда","Ярославль","Москва"]);
+const siktivkar_msk = seg(["Сыктывкар","Киров","Ярославль","Москва"]);
+const yosh_msk = seg(["Йошкар-Ола","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const nurengoy_vladivostok = seg(["Новый Уренгой","Сургут","Тюмень","Новосибирск","Кемерово","Красноярск","Иркутск","Улан-Удэ","Чита","Сковородино","Свободный","Хабаровск","Владивосток"]);
+const khm_paths_1 = seg(["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Пермь","Киров","Кострома","Ярославль","Москва"]);
+const khm_paths_2 = seg(["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Пермь","Ижевск","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const khm_paths_3 = seg(["Ханты-Мансийск","Сургут","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const nizhnevart_paths_1 = seg(["Нижневартовск","Сургут","Тюмень","Екатеринбург","Пермь","Киров","Кострома","Ярославль","Москва"]);
+const nizhnevart_paths_2 = seg(["Нижневартовск","Сургут","Тюмень","Екатеринбург","Пермь","Ижевск","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const nizhnevart_paths_3 = seg(["Нижневартовск","Сургут","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир","Москва"]);
+const abakan_branch = seg(["Кызыл","Абакан","Красноярск","Кемерово","Новосибирск","Барнаул"]);
+const novokuz = seg(["Новокузнецк","Кемерово"]);
+const biysk = seg(["Бийск","Барнаул"]);
+const yakutsk = seg(["Якутск","Чита"]);
+const kalin = seg(["Москва","Санкт-Петербург","Калининград"]);
+const to_orsk = seg(["Тольятти","Оренбург","Орск"]);
+const crimea_1 = seg(["Ростов-на-Дону","Мариуполь","Мелитополь","Симферополь","Севастополь"]);
+const crimea_2 = seg(["Ростов-на-Дону","Краснодар","Керчь","Симферополь","Севастополь"]);
+const msk_tlt = seg(["Москва","Рязань","Пенза","Тольятти"]);
 
 const LINES: LineDef[] = [
-  { id: "EW-1", name: "Восток–Запад (через Тюмень)", color: "#1976d2", stations: eastwest_v1 },
-  { id: "EW-2", name: "Восток–Запад (через Челябинск–Уфа)", color: "#1e88e5", stations: eastwest_v2 },
-  { id: "TOM-1", name: "Томск→Москва (через Тюмень)", color: "#2e86de", stations: tomsk_msk_v1 },
-  { id: "TOM-2", name: "Томск→Москва (через Челябинск–Уфа)", color: "#54a0ff", stations: tomsk_msk_v2 },
-  { id: "S-KR-1", name: "Южная к Краснодару (через Воронеж)", color: "#e53935", stations: to_kras_v1 },
-  { id: "S-KR-2", name: "Южная к Краснодару (через Волгоград)", color: "#d81b60", stations: to_kras_v2 },
-  { id: "S-KR-3", name: "Южная от Челябинска (через Воронеж)", color: "#c2185b", stations: to_kras_v3 },
-  { id: "S-KR-4", name: "Южная от Челябинска (через Волгоград)", color: "#ad1457", stations: to_kras_v4 },
-  { id: "CA-1", name: "Каспий–Кавказ через Астрахань", color: "#43a047", stations: cauc_via_astr },
-  { id: "CA-2", name: "Кавказ предгорья", color: "#2e7d32", stations: cauc_via_footh },
-  { id: "CA-3", name: "Элиста↔Невинномысск/Астрахань", color: "#66bb6a", stations: nev_series_1 },
-  { id: "CA-4", name: "Элиста↔Невинномысск/Грозный", color: "#81c784", stations: nev_series_2 },
-  { id: "N-1", name: "Север через Санкт‑Петербург", color: "#8e24aa", stations: murmansk_via_spb },
-  { id: "N-2", name: "Север через Вологду", color: "#5e35b1", stations: murmansk_via_vologda },
-  { id: "N-3", name: "Сыктывкар→Москва", color: "#7e57c2", stations: siktivkar_msk },
-  { id: "N-4", name: "Йошкар‑Ола→Москва", color: "#9575cd", stations: yosh_msk },
-  { id: "NR-VL", name: "Новый Уренгой→Владивосток", color: "#00897b", stations: nurengoy_vladivostok },
-  { id: "KHM-1", name: "Ханты‑Мансийск→Москва (через Киров)", color: "#00acc1", stations: khm_paths_1 },
-  { id: "KHM-2", name: "Ханты‑Мансийск→Москва (через Ижевск)", color: "#26c6da", stations: khm_paths_2 },
-  { id: "KHM-3", name: "Ханты‑Мансийск→Москва (через Н.Челны)", color: "#4dd0e1", stations: khm_paths_3 },
-  { id: "NV-1", name: "Нижневартовск→Москва (через Киров)", color: "#ef6c00", stations: nizhnevart_paths_1 },
-  { id: "NV-2", name: "Нижневартовск→Москва (через Ижевск)", color: "#f57c00", stations: nizhnevart_paths_2 },
-  { id: "NV-3", name: "Нижневартовск→Москва (через Н.Челны)", color: "#ffa000", stations: nizhnevart_paths_3 },
-  { id: "AB-1", name: "Кызыл–Абакан–Барнаул", color: "#6d4c41", stations: abakan_branch },
-  { id: "NVKZ", name: "Новокузнецк↔Кемерово", color: "#a1887f", stations: novokuz },
-  { id: "BIYSK", name: "Бийск↔Барнаул", color: "#795548", stations: biysk },
-  { id: "YK-CH", name: "Якутск↔Чита", color: "#9ccc65", stations: yakutsk },
-  { id: "KAL", name: "Калининградская", color: "#c0ca33", stations: kalin },
-  { id: "ORSK", name: "Тольятти↔Орск", color: "#90a4ae", stations: to_orsk },
-  { id: "CR-1", name: "Крым через Мариуполь", color: "#ff7043", stations: crimea_1 },
-  { id: "CR-2", name: "Крым через Керчь", color: "#ff8a65", stations: crimea_2 },
-  { id: "MSK-TLT", name: "Москва↔Тольятти (Рязань–Пенза)", color: "#3949ab", stations: msk_tlt },
+  { id: "EW-1", name: "Восток–Запад (через Тюмень)", color: "#1976d2", segments: eastwest_v1 },
+  { id: "EW-2", name: "Восток–Запад (через Челябинск–Уфа)", color: "#1e88e5", segments: eastwest_v2 },
+  { id: "TOM-1", name: "Томск→Москва (через Тюмень)", color: "#2e86de", segments: tomsk_msk_v1 },
+  { id: "TOM-2", name: "Томск→Москва (через Челябинск–Уфа)", color: "#54a0ff", segments: tomsk_msk_v2 },
+  { id: "S-KR-1", name: "Южная к Краснодару (через Воронеж)", color: "#e53935", segments: to_kras_v1 },
+  { id: "S-KR-2", name: "Южная к Краснодару (через Волгоград)", color: "#d81b60", segments: to_kras_v2 },
+  { id: "S-KR-3", name: "Южная от Челябинска (через Воронеж)", color: "#c2185b", segments: to_kras_v3 },
+  { id: "S-KR-4", name: "Южная от Челябинска (через Волгоград)", color: "#ad1457", segments: to_kras_v4 },
+  { id: "CA-1", name: "Каспий–Кавказ через Астрахань", color: "#43a047", segments: cauc_via_astr },
+  { id: "CA-2", name: "Кавказ предгорья", color: "#2e7d32", segments: cauc_via_footh },
+  { id: "CA-3", name: "Элиста↔Невинномысск/Астрахань", color: "#66bb6a", segments: nev_series_1 },
+  { id: "CA-4", name: "Элиста↔Невинномысск/Грозный", color: "#81c784", segments: nev_series_2 },
+  { id: "N-1", name: "Север через Санкт‑Петербург", color: "#8e24aa", segments: murmansk_via_spb },
+  { id: "N-2", name: "Север через Вологду", color: "#5e35b1", segments: murmansk_via_vologda },
+  { id: "N-3", name: "Сыктывкар→Москва", color: "#7e57c2", segments: siktivkar_msk },
+  { id: "N-4", name: "Йошкар‑Ола→Москва", color: "#9575cd", segments: yosh_msk },
+  { id: "NR-VL", name: "Новый Уренгой→Владивосток", color: "#00897b", segments: nurengoy_vladivostok },
+  { id: "KHM-1", name: "Ханты‑Мансийск→Москва (через Киров)", color: "#00acc1", segments: khm_paths_1 },
+  { id: "KHM-2", name: "Ханты‑Мансийск→Москва (через Ижевск)", color: "#26c6da", segments: khm_paths_2 },
+  { id: "KHM-3", name: "Ханты‑Мансийск→Москва (через Н.Челны)", color: "#4dd0e1", segments: khm_paths_3 },
+  { id: "NV-1", name: "Нижневартовск→Москва (через Киров)", color: "#ef6c00", segments: nizhnevart_paths_1 },
+  { id: "NV-2", name: "Нижневартовск→Москва (через Ижевск)", color: "#f57c00", segments: nizhnevart_paths_2 },
+  { id: "NV-3", name: "Нижневартовск→Москва (через Н.Челны)", color: "#ffa000", segments: nizhnevart_paths_3 },
+  { id: "AB-1", name: "Кызыл–Абакан–Барнаул", color: "#6d4c41", segments: abakan_branch },
+  { id: "NVKZ", name: "Новокузнецк↔Кемерово", color: "#a1887f", segments: novokuz },
+  { id: "BIYSK", name: "Бийск↔Барнаул", color: "#795548", segments: biysk },
+  { id: "YK-CH", name: "Якутск↔Чита", color: "#9ccc65", segments: yakutsk },
+  { id: "KAL", name: "Калининградская", color: "#c0ca33", segments: kalin },
+  { id: "ORSK", name: "Тольятти↔Орск", color: "#90a4ae", segments: to_orsk },
+  { id: "CR-1", name: "Крым через Мариуполь", color: "#ff7043", segments: crimea_1 },
+  { id: "CR-2", name: "Крым через Керчь", color: "#ff8a65", segments: crimea_2 },
+  { id: "MSK-TLT", name: "Москва↔Тольятти (Рязань–Пенза)", color: "#3949ab", segments: msk_tlt },
 ];
 
 function buildNetwork(lines: LineDef[]) {
   const nodes = new Set<string>();
-  const edges: Array<{ a: string; b: string; lineId: string }>=[];
+  const edges: Array<{ a: string; b: string; lineId: string }> = [];
   lines.forEach(l=>{
-    l.stations.forEach(s=>nodes.add(s));
-    for(let i=0;i<l.stations.length-1;i++) edges.push({a:l.stations[i], b:l.stations[i+1], lineId:l.id});
+    l.segments.forEach(id=>{
+      const seg = getSegment(id);
+      if(seg){
+        nodes.add(seg.from);
+        nodes.add(seg.to);
+        edges.push({a:seg.from, b:seg.to, lineId:l.id});
+    });
   });
   return { nodes: Array.from(nodes), edges };
 }
@@ -234,7 +241,7 @@ function buildVariantsIndex(rows: Array<{ origin: string; destination: string; p
 
 function collectCities(lines: LineDef[], rows: Array<{ origin: string; destination: string; path: string[] }>) {
   const set = new Set<string>();
-  lines.forEach(l=>l.stations.forEach(s=>set.add(s)));
+  lines.forEach(l=>l.segments.forEach(id=>{ const seg = getSegment(id); if(seg){ set.add(seg.from); set.add(seg.to); }}));
   rows.forEach(r=>{ set.add(r.origin); set.add(r.destination); r.path.forEach(s=>set.add(s)); });
   return Array.from(set).sort((a,b)=>a.localeCompare(b, "ru"));
 }
@@ -243,7 +250,8 @@ function variantEdges(stations: string[]){
   const set = new Set<string>();
   for(let i=0;i<stations.length-1;i++){
     const a = stations[i], b = stations[i+1];
-    const key = a<b?`${a}__${b}`:`${b}__${a}`; set.add(key);
+    const key = a<b?`${a}__${b}`:`${b}__${a}`;
+    set.add(key);
   }
   return set;
 }
@@ -388,7 +396,7 @@ export default function MetroMapGeoApp(){
                     </div>
                     <button onClick={()=>{ const next=new Set(activeLines); next.has(l.id)?next.delete(l.id):next.add(l.id); setActiveLines(next); }} className="text-xs px-2 py-1 rounded border hover:bg-gray-100">{active?"Скрыть":"Показать"}</button>
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">{l.stations.join(" — ")}</div>
+                  <div className="text-xs text-gray-600 mt-1">{stationsFromSegments(l.segments).join(" — ")}</div>
                 </div>
               );
             })}

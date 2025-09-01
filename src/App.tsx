@@ -1,91 +1,11 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { BASE_POS, segmentsFromStations, getSegment, type XY } from "./models/network";
 
-type XY = { x:number; y:number };
 type LineStyle = 'solid' | 'dashed' | 'dotted';
-type LineDef = { id: string; name: string; style: LineStyle; color: string; path: string[] };
+type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
 
 const GRID = 120;
 const STORAGE_VISIBLE = 'metro_lines_visibility_v1';
-
-// --- Базовые координаты станций ---
-const BASE_POS: Record<string, XY> = {
-  "Абакан": {x:1920, y:600},
-  "Астрахань": {x:480, y:1320},
-  "Барнаул": {x:1560, y:600},
-  "Биробиджан": {x:2520, y:600},
-  "Благовещенск": {x:2400, y:600},
-  "Будённовск": {x:360, y:1320},
-  "Владивосток": {x:2640, y:1200},
-  "Владикавказ": {x:240, y:1440},
-  "Владимир": {x:120, y:480},
-  "Волгоград": {x:240, y:960},
-  "Вологда": {x:0, y:240},
-  "Воронеж": {x:-120, y:840},
-  "Горно-Алтайск": {x:1680, y:720},
-  "Грозный": {x:360, y:1440},
-  "Екатеринбург": {x:960, y:360},
-  "Ижевск": {x:720, y:360},
-  "Иркутск": {x:2040, y:480},
-  "Йошкар-Ола": {x:480, y:360},
-  "Якутск": {x:2400, y:120},
-  "Казань": {x:600, y:480},
-  "Кемерово": {x:1680, y:480},
-  "Керчь": {x:-360, y:1020},
-  "Киров": {x:120, y:240},
-  "Краснодар": {x:-240, y:1020},
-  "Красноярск": {x:1920, y:480},
-  "Курган": {x:1200, y:600},
-  "Кызыл": {x:1920, y:720},
-  "Магадан": {x:3000, y:240},
-  "Мариуполь": {x:-240, y:960},
-  "Махачкала": {x:480, y:1560},
-  "Медвежьегорск": {x:-120, y:120},
-  "Мелитополь": {x:-360, y:960},
-  "Минеральные Воды": {x:0, y:1200},
-  "Москва": {x:-120, y:480},
-  "Мурманск": {x:-120, y:0},
-  "Набережные Челны": {x:720, y:480},
-  "Нальчик": {x:120, y:1320},
-  "Невинномысск": {x:-120, y:1080},
-  "Нижневартовск": {x:1440, y:120},
-  "Нижний Новгород": {x:240, y:480},
-  "Новокузнецк": {x:1680, y:600},
-  "Новосибирск": {x:1560, y:480},
-  "Новый Уренгой": {x:1200, y:0},
-  "Омск": {x:1320, y:480},
-  "Оренбург": {x:720, y:840},
-  "Орск": {x:840, y:840},
-  "Пенза": {x:360, y:720},
-  "Пермь": {x:720, y:240},
-  "Петрозаводск": {x:-240, y:240},
-  "Ростов-на-Дону": {x:-120, y:960},
-  "Рязань": {x:120, y:600},
-  "Санкт-Петербург": {x:-240, y:360},
-  "Саратов": {x:360, y:840},
-  "Свободный": {x:2460, y:480},
-  "Севастополь": {x:-600, y:1020},
-  "Симферополь": {x:-480, y:1020},
-  "Сковородино": {x:2400, y:480},
-  "Сургут": {x:1200, y:120},
-  "Сыктывкар": {x:240, y:120},
-  "Тамбов": {x:120, y:720},
-  "Тверь": {x:-120, y:420},
-  "Тольятти": {x:600, y:720},
-  "Томск": {x:1680, y:360},
-  "Тюмень": {x:1200, y:360},
-  "Улан-Удэ": {x:2160, y:480},
-  "Уссурийск": {x:2640, y:960},
-  "Уфа": {x:720, y:600},
-  "Хабаровск": {x:2640, y:720},
-  "Ханты-Мансийск": {x:960, y:120},
-  "Чебоксары": {x:480, y:480},
-  "Челябинск": {x:960, y:600},
-  "Чита": {x:2280, y:480},
-  "Элиста": {x:240, y:1080},
-  "Ярославль": {x:0, y:360},
-  "Великий Новгород": {x:-180, y:360},
-  "Бийск": {x:1620, y:660}
-};
 
 const stations = Object.keys(BASE_POS);
 const REMOVED_FROM_ROUTES = new Set<string>(["Калининград","Кострома"]);
@@ -122,59 +42,54 @@ function route(path:string[]):string[]{
   return out;
 }
 
-function buildEdgesFromPath(path:string[]):Array<{a:string;b:string}>{
-  const edges:Array<{a:string;b:string}> = [];
-  for(let i=0;i<path.length-1;i++){ const a=path[i], b=path[i+1]; if(a!==b) edges.push({a,b}); }
-  return edges;
-}
 
 // --- Ветки ---
 const RAW_LINES: Omit<LineDef,'color'>[] = [
   // Основные коридоры
-  { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', path: route(['Москва','Тамбов','Волгоград','Элиста']) },
-  { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
-  { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', path: route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']) },
+  { id:'MSK-VLG', name:'Москва → Элиста (через Тамбов / Волгоград)', style:'solid', segments: segmentsFromStations(route(['Москва','Тамбов','Волгоград','Элиста']))},
+  { id:'MSK-RST', name:'Москва → Владикавказ (через Воронеж / Ростов / Невинномысск / Минеральные Воды / Нальчик)', style:'solid', segments: segmentsFromStations(route(['Москва','Воронеж','Ростов-на-Дону','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']))},
+  { id:'MSK-ORSK', name:'Москва → Орск (через Рязань / Пензу / Тольятти / Оренбург)', style:'solid', segments: segmentsFromStations(route(['Москва','Рязань','Пенза','Тольятти','Оренбург','Орск']))},
   
   // Южные / Крым
-  { id:'VLG-RST-PURPLE', name:'Волгоград → Ростов-на-Дону', style:'dashed', path: route(['Волгоград','Ростов-на-Дону']) }, 
-  { id:'RST-MAR-CRIMEA-PINK', name:'Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', path: route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']) },
-  { id:'RST-KRD-PURPLE', name:'Ростов-на-Дону → Краснодар', style:'dotted', path: route(['Ростов-на-Дону','Краснодар']) },
-  { id:'MSK-RSTDN', name:'Москва → Ростов', style:'solid', path: route(['Москва','Воронеж','Ростов-на-Дону']) },
-  { id:'RST-KRD', name:'Ростов-на-Дону → Краснодар', style:'solid', path: route(['Ростов-на-Дону','Краснодар']) },
-  { id:'KRD-CRIMEA-PINK', name:'Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', path: route(['Краснодар','Керчь','Симферополь','Севастополь']) },
-  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', path: route(['Саратов','Воронеж','Ростов-на-Дону']) },
-  { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', path: route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']) },
-  { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
-  { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
-  { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', path: route(['Элиста','Будённовск','Грозный','Махачкала']) },
-  { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала', style:'solid', path: route(['Элиста','Астрахань','Махачкала']) },
+  { id:'VLG-RST-PURPLE', name:'Волгоград → Ростов-на-Дону', style:'dashed', segments: segmentsFromStations(route(['Волгоград','Ростов-на-Дону']))}, 
+  { id:'RST-MAR-CRIMEA-PINK', name:'Ростов-на-Дону → Мариуполь → Мелитополь → Симферополь → Севастополь', style:'dashed', segments: segmentsFromStations(route(['Ростов-на-Дону','Мариуполь','Мелитополь','Симферополь','Севастополь']))},
+  { id:'RST-KRD-PURPLE', name:'Ростов-на-Дону → Краснодар', style:'dotted', segments: segmentsFromStations(route(['Ростов-на-Дону','Краснодар']))},
+  { id:'MSK-RSTDN', name:'Москва → Ростов', style:'solid', segments: segmentsFromStations(route(['Москва','Воронеж','Ростов-на-Дону']))},
+  { id:'RST-KRD', name:'Ростов-на-Дону → Краснодар', style:'solid', segments: segmentsFromStations(route(['Ростов-на-Дону','Краснодар']))},
+  { id:'KRD-CRIMEA-PINK', name:'Краснодар → Керчь → Симферополь → Севастополь', style:'dotted', segments: segmentsFromStations(route(['Краснодар','Керчь','Симферополь','Севастополь']))},
+  { id:'SRT-VRN-RST', name:'Саратов → Воронеж → Ростов-на-Дону', style:'dashed', segments: segmentsFromStations(route(['Саратов','Воронеж','Ростов-на-Дону']))},
+  { id:'VLG-ELI-CAUC-PURPLE', name:'Волгоград → Элиста → Невинномысск → Минеральные Воды → Нальчик → Владикавказ', style:'solid', segments: segmentsFromStations(route(['Волгоград','Элиста','Невинномысск','Минеральные Воды','Нальчик','Владикавказ']))},
+  { id:'VLG-ELI-GRZ-MAH', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', segments: segmentsFromStations(route(['Элиста','Будённовск','Грозный','Махачкала']))},
+  { id:'VLG-ELI-AST-MAH', name:'Элиста → Астрахань → Махачкала', style:'solid', segments: segmentsFromStations(route(['Элиста','Астрахань','Махачкала']))},
+  { id:'VLG-ELI-GRZ-MAH-BLUE', name:'Элиста → Будённовск → Грозный → Махачкала', style:'solid', segments: segmentsFromStations(route(['Элиста','Будённовск','Грозный','Махачкала']))},
+  { id:'VLG-ELI-AST-MAH-BLUE', name:'Элиста → Астрахань → Махачкала', style:'solid', segments: segmentsFromStations(route(['Элиста','Астрахань','Махачкала']))},
   // Красное продление на восток
-  { id:'VLG-SRT-UFA', name:'Волгоград → Тольятти (через Саратов)', style:'solid', path: route(['Волгоград','Саратов','Тольятти']) },
-  { id:'MSK-NCH-SALAD', name:'Москва → Набережные Челны (через Владимир / Нижний Новгород / Чебоксары / Казань)', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Набережные Челны']) },
-  { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны']) },
-  { id:'OMSK-NCH-IZH-GRAY', name:'Омск → Уфа (через Тюмень / Екатеринбург)', style:'solid', path: route(['Омск','Тюмень','Екатеринбург','Набережные Челны','Уфа']) },
-  { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', path: route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']) },
-  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (серая)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
-  { id:'OMSK-VVO-SALAD', name:'Омск → Владивосток (салатовая)', style:'solid', path: route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']) },
-  { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', path: route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']) },
+  { id:'VLG-SRT-UFA', name:'Волгоград → Тольятти (через Саратов)', style:'solid', segments: segmentsFromStations(route(['Волгоград','Саратов','Тольятти']))},
+  { id:'MSK-NCH-SALAD', name:'Москва → Набережные Челны (через Владимир / Нижний Новгород / Чебоксары / Казань)', style:'solid', segments: segmentsFromStations(route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Набережные Челны']))},
+  { id:'OMSK-NCH-IZH', name:'Омск → Набережные Челны (через Тюмень / Екатеринбург)', style:'dashed', segments: segmentsFromStations(route(['Омск','Тюмень','Екатеринбург','Набережные Челны']))},
+  { id:'OMSK-NCH-IZH-GRAY', name:'Омск → Уфа (через Тюмень / Екатеринбург)', style:'solid', segments: segmentsFromStations(route(['Омск','Тюмень','Екатеринбург','Набережные Челны','Уфа']))},
+  { id:'OMSK-NCH-UFA', name:'Омск → Набережные Челны (через Курган / Челябинск / Уфа)', style:'dotted', segments: segmentsFromStations(route(['Омск','Курган','Челябинск','Уфа','Набережные Челны']))},
+  { id:'OMSK-VVO-GREY', name:'Омск → Владивосток (серая)', style:'solid', segments: segmentsFromStations(route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
+  { id:'OMSK-VVO-SALAD', name:'Омск → Владивосток (салатовая)', style:'solid', segments: segmentsFromStations(route(['Омск','Кемерово','Красноярск','Иркутск','Улан-Удэ','Чита','Сковородино','Свободный','Благовещенск','Биробиджан','Хабаровск','Уссурийск','Владивосток']))},
+  { id:'OMSK-VLG-GREY', name:'Омск → Волгоград (через Курган / Челябинск / Уфа / Тольятти / Саратов)', style:'solid', segments: segmentsFromStations(route(['Омск','Курган','Челябинск','Уфа','Тольятти','Саратов','Волгоград']))},
   // Тёмно-коричневый северный блок
-  { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', path: route(['Сургут','Тюмень','Екатеринбург']) },
-  { id:'EKB-MSK-KIR', name:'Екатеринбург → Москва (через Пермь / Киров / Ярославль)', style:'dashed', path: route(['Екатеринбург','Пермь','Киров','Ярославль','Москва']) },
-  { id:'EKB-MSK-IZH', name:'Екатеринбург → Москва (через Пермь / Ижевск / Казань / Чебоксары / Нижний Новгород / Владимир)', style:'dotted', path: route(['Екатеринбург','Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']) },
-  { id:'SYK-KIR-YAR-MSK', name:'Сыктывкар → Киров → Ярославль → Москва', style:'solid', path: route(['Сыктывкар','Киров','Ярославль','Москва']) },
+  { id:'SRG-EKB', name:'Сургут → Екатеринбург (через Тюмень)', style:'solid', segments: segmentsFromStations(route(['Сургут','Тюмень','Екатеринбург']))},
+  { id:'EKB-MSK-KIR', name:'Екатеринбург → Москва (через Пермь / Киров / Ярославль)', style:'dashed', segments: segmentsFromStations(route(['Екатеринбург','Пермь','Киров','Ярославль','Москва']))},
+  { id:'EKB-MSK-IZH', name:'Екатеринбург → Москва (через Пермь / Ижевск / Казань / Чебоксары / Нижний Новгород / Владимир)', style:'dotted', segments: segmentsFromStations(route(['Екатеринбург','Пермь','Ижевск','Казань','Чебоксары','Нижний Новгород','Владимир','Москва']))},
+  { id:'SYK-KIR-YAR-MSK', name:'Сыктывкар → Киров → Ярославль → Москва', style:'solid', segments: segmentsFromStations(route(['Сыктывкар','Киров','Ярославль','Москва']))},
   // Север
-  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', path: route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']) },
-  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', path: route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']) },
-  { id:'YOL-CHB-NNOV-VLA-MSK', name:'Йошкар-Ола → Чебоксары → Нижний Новгород → Владимир → Москва', style:'solid', path: route(['Йошкар-Ола','Чебоксары','Нижний Новгород','Владимир','Москва']) },
-  { id:'MSK-VLA-NNOV-CHB-KZN-ULY-TLT', name:'Москва → Владимир → Нижний Новгород → Чебоксары → Казань → Ульяновск → Тольятти', style:'solid', path: route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Ульяновск','Тольятти']) },
+  { id:'MSK-MUR-SPB', name:'Москва → Мурманск (через СПб / Петрозаводск / Медвежьегорск)', style:'dashed', segments: segmentsFromStations(route(['Москва','Тверь','Великий Новгород','Санкт-Петербург','Петрозаводск','Медвежьегорск','Мурманск']))},
+  { id:'MSK-MUR-YAR', name:'Москва → Мурманск (через Ярославль / Вологду / Медвежьегорск)', style:'dotted', segments: segmentsFromStations(route(['Москва','Ярославль','Вологда','Медвежьегорск','Мурманск']))},
+  { id:'YOL-CHB-NNOV-VLA-MSK', name:'Йошкар-Ола → Чебоксары → Нижний Новгород → Владимир → Москва', style:'solid', segments: segmentsFromStations(route(['Йошкар-Ола','Чебоксары','Нижний Новгород','Владимир','Москва']))},
+  { id:'MSK-VLA-NNOV-CHB-KZN-ULY-TLT', name:'Москва → Владимир → Нижний Новгород → Чебоксары → Казань → Ульяновск → Тольятти', style:'solid', segments: segmentsFromStations(route(['Москва','Владимир','Нижний Новгород','Чебоксары','Казань','Ульяновск','Тольятти']))},
   // Северные/Сибирские короткие связи
-  { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', path: route(['Новый Уренгой','Сургут']) },
-  { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', path: route(['Ханты-Мансийск','Сургут']) },
-  { id:'NVV-SRG', name:'Нижневартовск → Сургут', style:'solid', path: route(['Нижневартовск','Сургут']) },
-  { id:'NSK-GALT', name:'Новосибирск → Горно-Алтайск (через Барнаул / Бийск)', style:'solid', path: route(['Новосибирск','Барнаул','Бийск','Горно-Алтайск']) },
-  { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', path: route(['Томск','Кемерово','Новокузнецк']) },
-  { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', path: route(['Красноярск','Абакан','Кызыл']) },
-  { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', path: route(['Сковородино','Якутск','Магадан']) },
+  { id:'NRG-SRG', name:'Новый Уренгой → Сургут', style:'solid', segments: segmentsFromStations(route(['Новый Уренгой','Сургут']))},
+  { id:'KHM-SRG', name:'Ханты-Мансийск → Сургут', style:'solid', segments: segmentsFromStations(route(['Ханты-Мансийск','Сургут']))},
+  { id:'NVV-SRG', name:'Нижневартовск → Сургут', style:'solid', segments: segmentsFromStations(route(['Нижневартовск','Сургут']))},
+  { id:'NSK-GALT', name:'Новосибирск → Горно-Алтайск (через Барнаул / Бийск)', style:'solid', segments: segmentsFromStations(route(['Новосибирск','Барнаул','Бийск','Горно-Алтайск']))},
+  { id:'TOM-NOVK', name:'Томск → Новокузнецк (через Кемерово)', style:'solid', segments: segmentsFromStations(route(['Томск','Кемерово','Новокузнецк']))},
+  { id:'KRS-KYZ', name:'Красноярск → Кызыл (через Абакан)', style:'solid', segments: segmentsFromStations(route(['Красноярск','Абакан','Кызыл']))},
+  { id:'CHT-MAG', name:'Сковородино → Магадан (через Якутск)', style:'solid', segments: segmentsFromStations(route(['Сковородино','Якутск','Магадан']))},
 ];
 
 const RAW_LINES_CLEAN = RAW_LINES.filter(Boolean) as Omit<LineDef,'color'>[];
@@ -246,7 +161,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['VLG-RST-PURPLE','RST-MAR-CRIMEA-PINK','RST-KRD-PURPLE','KRD-CRIMEA-PINK','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','OMSK-NCH-IZH-GRAY'] }
 ];
 
-function buildEdges(line: LineDef){ return buildEdgesFromPath(line.path).map(e=>({ ...e, lineId: line.id })); }
+function buildEdges(line: LineDef){ return line.segments.map(id=>{ const s=getSegment(id); return s?{a:s.from,b:s.to,lineId:line.id}:undefined; }).filter(Boolean) as Array<{a:string;b:string;lineId:string}>; }
 
 export default function MetroBranches(){
   const [scale,setScale]=useState(0.6);
@@ -302,9 +217,17 @@ export default function MetroBranches(){
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
-  const selfTest = useMemo(()=>{
+  const selfTest = useMemo(() => {
     const errors:string[]=[];
-    for(const l of LINES){ if(l.path.length<2) errors.push(`Линия ${l.id} слишком короткая`); for(const n of l.path){ if(!pos[n]) errors.push(`Нет координат для ${n}`); }}
+    for(const l of LINES){
+      if(l.segments.length<1) errors.push(`Линия ${l.id} слишком короткая`);
+      for(const sid of l.segments){
+        const seg = getSegment(sid);
+        if(!seg){ errors.push(`Нет сегмента ${sid}`); continue; }
+        if(!pos[seg.from]) errors.push(`Нет координат для ${seg.from}`);
+        if(!pos[seg.to]) errors.push(`Нет координат для ${seg.to}`);
+      }
+    }
     return {errors};
   },[]);
 

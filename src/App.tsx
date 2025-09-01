@@ -227,7 +227,6 @@ export default function App(){
   }, [pathSegments, pathInfo.path, findLineBySegment]);
   const [animating, setAnimating] = useState(false);
   const [animProgress, setAnimProgress] = useState(0);
-
   const handleBuild = useCallback(() => {
     if(pathEdges.length===0) return;
     setBuilt(true);
@@ -251,7 +250,6 @@ export default function App(){
     });
     setAnimating(false);
   }, []);
-
   const handleGo = useCallback(() => {
     if(pathEdges.length===0) return;
     setAnimating(true);
@@ -290,7 +288,6 @@ export default function App(){
     }
     return null;
   },[animProgress,pathEdges,pos]);
-
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -323,6 +320,59 @@ export default function App(){
       </div>
 
       <div className="flex">
+
+        <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
+          <div className="mb-4">
+            <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
+            <div className="space-y-2 text-sm">
+              <select value={startStation} onChange={e=>setStartStation(e.target.value)} className="w-full border p-1 rounded">
+                <option value="">Начальная станция</option>
+                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+              </select>
+              <select value={endStation} onChange={e=>setEndStation(e.target.value)} className="w-full border p-1 rounded">
+                <option value="">Конечная станция</option>
+                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+              </select>
+              {pathOptions.length>1 && (
+                <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
+                  {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
+                </select>
+              )}
+              {pathInfo.path.length>1 && (
+                <div className="pt-1 space-y-1">
+                  <div>Протяжённость: {Math.round(pathInfo.length)}</div>
+                  <div className="text-xs text-gray-600 break-words">{pathInfo.path.join(' → ')}</div>
+                  {routeDetails.length>0 && (
+                    <ol className="mt-2 text-xs text-gray-700 list-decimal pl-4 space-y-1">
+                      {routeDetails.map((g,i)=>(
+                        <li key={i}>
+                          Проезд по ветке <span style={{color:g.line?.color}}>{g.line?.name ?? '—'}</span> от {g.stations[0]} до {g.stations[g.stations.length-1]}
+                          {g.stations.length>2 && (
+                            <div className="ml-4">
+                              {g.stations.slice(1,-1).map(s=>(<div key={s}>{s}</div>))}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
+          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
+          <div className="mt-4 border-t pt-3 text-xs">
+            <div className="font-semibold text-gray-800 mb-1">Статус</div>
+            {selfTest.errors.length>0 ? (
+              <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
+                {selfTest.errors.map((e,i)=>(<div key={i}>• {e}</div>))}
+              </div>
+            ) : (
+              <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">✓ Проверки пройдены</div>
+            )}
+          </div>
+        </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}

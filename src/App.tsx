@@ -180,9 +180,44 @@ export default function App(){
   useEffect(()=>{ try{ localStorage.setItem(STORAGE_VISIBLE, JSON.stringify(visible)); }catch{} },[visible]);
   const activeLines = useMemo(()=> LINES.filter(l=> visible[l.id]!==false), [visible]);
 
+  const toggleLine = useCallback((id:string)=>{
+    setVisible(v=>({...v,[id]:!(v[id]!==false)}));
+  },[]);
+  const toggleCorridor = useCallback((cid:string)=>{
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(v=>{
+      const allOn = ids.every(id=>v[id]!==false);
+      const next = {...v};
+      ids.forEach(id=>{ next[id] = !allOn; });
+      return next;
+    });
+  },[]);
+  const soloCorridor = useCallback((cid:string)=>{
+    const ids = CORRIDORS.find(c=>c.id===cid)?.lineIds ?? [];
+    setVisible(() => {
+      const next:Record<string,boolean>={};
+      for(const l of LINES) next[l.id] = ids.includes(l.id);
+      return next;
+    });
+  },[]);
+
   const pos = BASE_POS;
   const svgRef = useRef<SVGSVGElement>(null);
   const labels = useMemo(()=>placeLabels(stations,pos,13,scale),[scale]);
+
+  const selfTest = useMemo<{errors:string[]}>(()=>{
+    const errors:string[]=[];
+    for(const l of LINES){
+      if(l.segments.length<1) errors.push(`Линия ${l.id} слишком короткая`);
+      for(const sid of l.segments){
+        const seg = getSegment(sid);
+        if(!seg){ errors.push(`Нет сегмента ${sid}`); continue; }
+        if(!pos[seg.from]) errors.push(`Нет координат для ${seg.from}`);
+        if(!pos[seg.to]) errors.push(`Нет координат для ${seg.to}`);
+      }
+    }
+    return {errors};
+  },[]);
 
   const [startStation, setStartStation] = useState<string>("");
   const [endStation, setEndStation] = useState<string>("");
@@ -365,7 +400,7 @@ export default function App(){
             <div className="font-semibold text-gray-800 mb-1">Статус</div>
             {selfTest.errors.length>0 ? (
               <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
-                {selfTest.errors.map((e,i)=>(<div key={i}>• {e}</div>))}
+                {selfTest.errors.map((e: string, i: number)=>(<div key={i}>• {e}</div>))}
               </div>
             ) : (
               <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">✓ Проверки пройдены</div>
@@ -496,5 +531,47 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
         <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
       </g>); })}
   </>;
+}
+
+function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
+  return (
+    <>
+      <div className="flex items-center gap-2 text-xs mb-2">
+        <div className="ml-auto text-gray-600">Коридоров: {CORRIDORS.length}</div>
+      </div>
+      <div className="space-y-3">
+        {CORRIDORS.map(c=>{
+          const ids = c.lineIds.filter(id => LINES.some(l=>l.id===id));
+          const onCount = ids.filter(id => visible[id] !== false).length;
+          const allOn = onCount===ids.length && ids.length>0;
+          const someOn = onCount>0 && onCount<ids.length;
+          return (
+            <div key={c.id} className="border rounded p-2">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={allOn} ref={el=>{ if(el) (el as HTMLInputElement).indeterminate = someOn; }} onChange={()=>toggleCorridor(c.id)} />
+                <div className="w-3 h-3 rounded" style={{background:c.color ?? '#999'}} />
+                <div className="font-semibold text-xs">{c.name}</div>
+                <div className="ml-auto text-xs text-gray-600">{onCount}/{ids.length}</div>
+                <button onClick={()=>soloCorridor(c.id)} className="ml-2 px-2 py-0.5 border rounded text-xs hover:bg-gray-50">Solo</button>
+              </div>
+              <div className="mt-2 space-y-1">
+                {ids.map(id=>{
+                  const l = LINES.find(x=>x.id===id)!;
+                  const isOn = visible[id] !== false;
+                  return (
+                    <div key={id} className="flex items-center gap-2 text-xs" style={{opacity:isOn?1:0.4}}>
+                      <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
+                      <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
+                      <div title={l.name}>{l.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
 }
 

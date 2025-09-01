@@ -342,6 +342,44 @@ export default function App(){
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
+  // === Legend / visibility controls ===
+  const toggleLine = useCallback((lineId: string) => {
+    setVisible(prev => ({ ...prev, [lineId]: prev[lineId] === false ? true : !prev[lineId] }));
+  }, []);
+
+  const toggleCorridor = useCallback((corridorId: string) => {
+    const corridor = CORRIDORS.find(c => c.id === corridorId);
+    if (!corridor) return;
+    const onCount = corridor.lineIds.filter(id => visible[id] !== false).length;
+    const turnOn = onCount < corridor.lineIds.length;
+    setVisible(prev => {
+      const next: Record<string, boolean> = { ...prev };
+      corridor.lineIds.forEach(id => { next[id] = turnOn; });
+      return next;
+    });
+  }, [visible]);
+
+  const soloCorridor = useCallback((corridorId: string) => {
+    const corridor = CORRIDORS.find(c => c.id === corridorId);
+    if (!corridor) return;
+    setVisible(() => {
+      const next: Record<string, boolean> = {};
+      for (const l of LINES) next[l.id] = corridor.lineIds.includes(l.id);
+      return next;
+    });
+  }, []);
+
+  // Простой самотест (для панели статуса)
+  const selfTest = useMemo(() => {
+    const errors: string[] = [];
+    const lineIds = new Set(LINES.map(l => l.id));
+    for (const c of CORRIDORS) {
+      for (const id of c.lineIds) {
+        if (!lineIds.has(id)) errors.push(`В коридоре "${c.name}" отсутствует линия "${id}"`);
+      }
+    }
+    return { errors };
+  }, []);
 
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
@@ -532,7 +570,6 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
       </g>); })}
   </>;
 }
-
 function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorridor, toggleLine}:{CORRIDORS:{id:string;name:string;color?:string;lineIds:string[]}[]; LINES:LineDef[]; visible:Record<string,boolean>; toggleCorridor:(id:string)=>void; soloCorridor:(id:string)=>void; toggleLine:(id:string)=>void;}){
   return (
     <>
@@ -574,4 +611,3 @@ function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorrido
     </>
   );
 }
-

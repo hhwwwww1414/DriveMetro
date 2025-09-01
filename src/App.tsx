@@ -173,6 +173,7 @@ export default function MetroBranches(){
   const [translateY,setTranslateY]=useState(150);
   const [isDragging,setIsDragging]=useState(false);
   const [blur,setBlur]=useState(70);
+  const [showBg, setShowBg] = useState(true);
 
   const [visible,setVisible]=useState<Record<string,boolean>>(()=>{
     try{ const raw=localStorage.getItem(STORAGE_VISIBLE); if(raw) return JSON.parse(raw); }catch{}
@@ -358,7 +359,7 @@ export default function MetroBranches(){
           >
             <rect width="100%" height="100%" fill="#fafafa" />
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              <MapImage blur={blur} />
+              {showBg && <MapImage blur={blur} />}
               <MapGrid />
               {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
               {built && pathEdges.map((e,i)=>{
@@ -377,9 +378,13 @@ export default function MetroBranches(){
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
-          <div className="absolute bottom-2 right-2 bg-white/80 p-2 rounded shadow">
+          <div className="absolute bottom-2 right-2 bg-white/80 p-2 rounded shadow space-y-1">
+            <label className="flex items-center gap-1 text-xs">
+              <input type="checkbox" checked={showBg} onChange={e=>setShowBg(e.target.checked)} />
+              Фото
+            </label>
             <div className="text-xs mb-1 text-center">Блюр</div>
-            <input type="range" min={0} max={100} value={blur} onChange={e=>setBlur(Number(e.target.value))} className="w-32" />
+            <input type="range" min={0} max={100} value={blur} onChange={e=>setBlur(Number(e.target.value))} className="w-32" disabled={!showBg} />
           </div>
         </div>
         <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-l p-3 h-screen overflow-y-auto relative shadow-lg">

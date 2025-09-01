@@ -231,12 +231,6 @@ export default function MetroBranches(){
   const handleBuild = useCallback(() => {
     if(pathEdges.length===0) return;
     setBuilt(true);
-    const lineSet = new Set(pathEdges.map(e=>e.lineId));
-    setVisible(() => {
-      const v:Record<string,boolean>={};
-      for(const l of LINES) v[l.id] = lineSet.has(l.id);
-      return v;
-    });
   }, [pathEdges]);
 
   const handleReset = useCallback(() => {
@@ -244,11 +238,6 @@ export default function MetroBranches(){
     setStartStation('');
     setEndStation('');
     setPathIndex(0);
-    setVisible(() => {
-      const v:Record<string,boolean>={};
-      for(const l of LINES) v[l.id]=true;
-      return v;
-    });
     setAnimating(false);
   }, []);
 
@@ -323,6 +312,22 @@ export default function MetroBranches(){
       </div>
 
       <div className="flex">
+        <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
+          <div className="space-y-1 text-sm">
+            {LINES.map(l => (
+              <label key={l.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={visible[l.id] !== false}
+                  onChange={e => setVisible(v => ({ ...v, [l.id]: e.target.checked }))}
+                />
+                <span className="w-3 h-3 rounded" style={{background:l.color}} />
+                <span>{l.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
@@ -339,7 +344,7 @@ export default function MetroBranches(){
             <rect width="100%" height="100%" fill="#fafafa" />
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Grid />
-              <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
+              {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
               {built && pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;

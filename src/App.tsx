@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { BASE_POS, segmentsFromStations, getSegment, type XY } from "./models/network";
+import { BASE_POS, segmentsFromStations, getSegment, type XY, buildEdgesFromPath, findPath } from "./models/network";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
@@ -198,6 +198,16 @@ export default function MetroBranches(){
   const svgRef = useRef<SVGSVGElement>(null);
   const labels = useMemo(()=>placeLabels(stations,pos,13,scale),[scale]);
 
+  const [startStation, setStartStation] = useState<string>("");
+  const [endStation, setEndStation] = useState<string>("");
+
+  const pathInfo = useMemo(() => {
+    if(!startStation || !endStation) return { path: [], length: 0 };
+    return findPath(startStation, endStation);
+  }, [startStation, endStation]);
+
+  const pathEdges = useMemo(() => buildEdgesFromPath(pathInfo.path), [pathInfo.path]);
+
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -244,6 +254,22 @@ export default function MetroBranches(){
 
       <div className="flex">
         <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
+          <div className="mb-4">
+            <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
+            <div className="space-y-2 text-sm">
+              <select value={startStation} onChange={e=>setStartStation(e.target.value)} className="w-full border p-1 rounded">
+                <option value="">Начальная станция</option>
+                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+              </select>
+              <select value={endStation} onChange={e=>setEndStation(e.target.value)} className="w-full border p-1 rounded">
+                <option value="">Конечная станция</option>
+                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+              </select>
+              {pathInfo.path.length>1 && (
+                <div className="pt-1">Протяжённость: {Math.round(pathInfo.length)}</div>
+              )}
+            </div>
+          </div>
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
           <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
           <div className="mt-4 border-t pt-3 text-xs">
@@ -275,6 +301,11 @@ export default function MetroBranches(){
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Grid />
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
+              {pathEdges.map((e,i)=>{
+                const a=pos[e.a], b=pos[e.b];
+                if(!a||!b) return null;
+                return <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeWidth={10} strokeLinecap="round" />;
+              })}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>

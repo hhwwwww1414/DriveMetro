@@ -212,7 +212,6 @@ export default function MetroBranches(){
   useEffect(() => { setPathIndex(0); }, [startStation, endStation]);
 
   const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
-
   const pathEdges = useMemo(() => buildEdgesFromPath(pathInfo.path), [pathInfo.path]);
 
   const containerWidth=1200, containerHeight=800;

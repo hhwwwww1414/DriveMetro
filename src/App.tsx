@@ -167,7 +167,7 @@ const CORRIDORS: Corridor[] = [
 
 function buildEdges(line: LineDef){ return line.segments.map(id=>{ const s=getSegment(id); return s?{a:s.from,b:s.to,lineId:line.id}:undefined; }).filter(Boolean) as Array<{a:string;b:string;lineId:string}>; }
 
-export default function MetroBranches(){
+export default function App(){
   const [scale,setScale]=useState(0.6);
   const [translateX,setTranslateX]=useState(300);
   const [translateY,setTranslateY]=useState(150);
@@ -320,6 +320,7 @@ export default function MetroBranches(){
       </div>
 
       <div className="flex">
+
         <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
           <div className="mb-4">
             <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
@@ -393,7 +394,6 @@ export default function MetroBranches(){
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
                 return (
-
                   <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={e.color} strokeWidth={8} strokeLinecap="round" />
                 );
               })}

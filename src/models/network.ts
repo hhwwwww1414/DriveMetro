@@ -126,3 +126,53 @@ export function stationsFromSegments(ids: string[]): string[] {
   }
   return result;
 }
+
+export function findPath(start: string, end: string): { path: string[]; length: number } {
+  if(start === end) return { path: [start], length: 0 };
+
+  const graph = new Map<string, Array<{to: string; weight: number}>>();
+  segmentMap.forEach(seg => {
+    const aPos = BASE_POS[seg.from];
+    const bPos = BASE_POS[seg.to];
+    if(!aPos || !bPos) return;
+    const len = seg.length ?? Math.hypot(aPos.x - bPos.x, aPos.y - bPos.y);
+    if(!graph.has(seg.from)) graph.set(seg.from, []);
+    if(!graph.has(seg.to)) graph.set(seg.to, []);
+    graph.get(seg.from)!.push({to: seg.to, weight: len});
+    graph.get(seg.to)!.push({to: seg.from, weight: len});
+  });
+
+  const dist: Record<string, number> = {};
+  const prev: Record<string, string | undefined> = {};
+  const queue: Array<{node: string; dist: number}> = [];
+
+  for(const name of Object.keys(BASE_POS)) dist[name] = Infinity;
+  dist[start] = 0;
+  queue.push({node: start, dist: 0});
+
+  while(queue.length > 0){
+    queue.sort((a,b) => a.dist - b.dist);
+    const {node, dist: d} = queue.shift()!;
+    if(node === end) break;
+    const neigh = graph.get(node) ?? [];
+    for(const {to, weight} of neigh){
+      const nd = d + weight;
+      if(nd < (dist[to] ?? Infinity)){
+        dist[to] = nd;
+        prev[to] = node;
+        queue.push({node: to, dist: nd});
+      }
+    }
+  }
+
+  if(dist[end] === Infinity) return { path: [], length: Infinity };
+
+  const path: string[] = [];
+  let cur: string | undefined = end;
+  while(cur){
+    path.push(cur);
+    cur = prev[cur];
+  }
+  path.reverse();
+  return { path, length: dist[end] };
+}

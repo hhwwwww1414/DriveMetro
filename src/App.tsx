@@ -308,11 +308,11 @@ export default function App(){
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
   // === Legend / visibility controls ===
-  const toggleLine = useCallback((lineId: string) => {
+  const handleToggleLine = useCallback((lineId: string) => {
     setVisible(prev => ({ ...prev, [lineId]: prev[lineId] === false ? true : !prev[lineId] }));
   }, []);
 
-  const toggleCorridor = useCallback((corridorId: string) => {
+  const handleToggleCorridor = useCallback((corridorId: string) => {
     const corridor = CORRIDORS.find(c => c.id === corridorId);
     if (!corridor) return;
     const onCount = corridor.lineIds.filter(id => visible[id] !== false).length;
@@ -324,7 +324,7 @@ export default function App(){
     });
   }, [visible]);
 
-  const soloCorridor = useCallback((corridorId: string) => {
+  const handleSoloCorridor = useCallback((corridorId: string) => {
     const corridor = CORRIDORS.find(c => c.id === corridorId);
     if (!corridor) return;
     setVisible(() => {
@@ -335,7 +335,7 @@ export default function App(){
   }, []);
 
   // Простой самотест (для панели статуса)
-  const selfTest = useMemo(() => {
+  const selfTestResult = useMemo(() => {
     const errors: string[] = [];
     const lineIds = new Set(LINES.map(l => l.id));
     for (const c of CORRIDORS) {
@@ -398,12 +398,12 @@ export default function App(){
             </div>
           </div>
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
-          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} />
+          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={handleToggleCorridor} soloCorridor={handleSoloCorridor} toggleLine={handleToggleLine} />
           <div className="mt-4 border-t pt-3 text-xs">
             <div className="font-semibold text-gray-800 mb-1">Статус</div>
-            {selfTest.errors.length>0 ? (
+            {selfTestResult.errors.length>0 ? (
               <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
-                {selfTest.errors.map((e: string, i: number)=>(<div key={i}>• {e}</div>))}
+                {selfTestResult.errors.map((e: string, i: number)=>(<div key={i}>• {e}</div>))}
               </div>
             ) : (
               <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">✓ Проверки пройдены</div>

@@ -4,7 +4,7 @@ import { BASE_POS, segmentsFromStations, getSegment, type XY, findPaths } from "
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
 
-const GRID = 120;
+const BG_URL = import.meta.env.BASE_URL + 'bg.jpg';
 const STORAGE_VISIBLE = 'metro_lines_visibility_v1';
 
 const stations = Object.keys(BASE_POS);
@@ -357,7 +357,7 @@ export default function MetroBranches(){
           >
             <rect width="100%" height="100%" fill="#fafafa" />
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
-              <Grid />
+              <MapImage />
               {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
               {built && pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
@@ -427,12 +427,18 @@ export default function MetroBranches(){
   );
 }
 
-function Grid(){
-  const lines:JSX.Element[]=[];
+function MapImage(){
   const minX=-800,maxX=3200,minY=-200,maxY=2000;
-  for(let x=minX;x<=maxX;x+=GRID){ lines.push(<line key={`gx${x}`} x1={x} y1={minY} x2={x} y2={maxY} stroke="#e5e7eb" strokeWidth={1} />); }
-  for(let y=minY;y<=maxY;y+=GRID){ lines.push(<line key={`gy${y}`} x1={minX} y1={y} x2={maxX} y2={y} stroke="#e5e7eb" strokeWidth={1} />); }
-  return <g>{lines}</g>;
+  return (
+    <image
+      href={BG_URL}
+      x={minX}
+      y={minY}
+      width={maxX-minX}
+      height={maxY-minY}
+      preserveAspectRatio="none"
+    />
+  );
 }
 
 function RouteLines({lines,pos,allLines}:{lines:LineDef[]; pos:Record<string,XY>; allLines:LineDef[]}){

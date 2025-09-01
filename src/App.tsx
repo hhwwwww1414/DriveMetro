@@ -158,6 +158,7 @@ const CORRIDORS: Corridor[] = [
   { id:'C_EAST_SALAD', name:'Москва → Владивосток (салатовый)', color:'#7ED957', lineIds:['MSK-NCH-SALAD','OMSK-NCH-IZH','OMSK-NCH-UFA','OMSK-VVO-SALAD'] },
   { id:'C_MSK_KRD', name:'Москва → Краснодар (оранжевый)', color:'#CC5500', lineIds:['MSK-RSTDN','RST-KRD'] },
   { id:'C_MSK_ORSK', name:'Москва → Орск (серый)', color:'#BDBDBD', lineIds:['MSK-ORSK'] },
+  { id:'C_MSK_SYK', name:'Москва → Сыктывкар', color:'#8B4513', lineIds:['SYK-KIR-YAR-MSK'] },
   { id:'C_SIB_SHORTS', name:'Сибирские ответвления (коричневый)', color:'#8B4513', lineIds:['NSK-GALT','TOM-NOVK','KRS-KYZ','CHT-MAG'] },
   { id:'C_VOLGA_BROWN', name:'Поволжье (коричневый)', color:'#8B4513', lineIds:['YOL-CHB-NNOV-VLA-MSK','MSK-VLA-NNOV-CHB-KZN-ULY-TLT'] },
   { id:'C_SOUTH_GREY', name:'Крым → Владивосток(фиолетовый)', color:'#7E57C2', lineIds:['VLG-RST-PURPLE','RST-MAR-CRIMEA-PINK','RST-KRD-PURPLE','KRD-CRIMEA-PINK','SRT-VRN-RST','OMSK-VVO-GREY','OMSK-VLG-GREY','OMSK-NCH-IZH-GRAY'] }
@@ -234,7 +235,47 @@ export default function MetroBranches(){
     groups.push({line: currentLine, stations: currentStations});
     return groups;
   }, [pathSegments, pathInfo.path, findLineBySegment]);
+  const [animating, setAnimating] = useState(false);
+  const [animProgress, setAnimProgress] = useState(0);
 
+  const handleGo = useCallback(() => {
+    if(pathEdges.length===0) return;
+    setAnimating(true);
+    setAnimProgress(0);
+  }, [pathEdges]);
+
+  useEffect(()=>{
+    if(!animating) return;
+    const duration = 10000;
+    const start = performance.now();
+    let raf:number;
+    const step = (now:number)=>{
+      const t = Math.min((now-start)/duration,1);
+      setAnimProgress(t);
+      if(t<1) raf=requestAnimationFrame(step); else setAnimating(false);
+    };
+    raf=requestAnimationFrame(step);
+    return ()=>cancelAnimationFrame(raf);
+  },[animating]);
+
+  const vehiclePos = useMemo(()=>{
+    if(pathEdges.length===0) return null;
+    const total = pathEdges.reduce((s,e)=>{
+      const a=pos[e.a], b=pos[e.b];
+      return s+Math.hypot(a.x-b.x,a.y-b.y);
+    },0);
+    let d = total*animProgress;
+    for(const e of pathEdges){
+      const a=pos[e.a], b=pos[e.b];
+      const len=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d<=len){
+        const t=d/len;
+        return {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t};
+      }
+      d-=len;
+    }
+    return null;
+  },[animProgress,pathEdges,pos]);
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -353,14 +394,59 @@ export default function MetroBranches(){
               {pathEdges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
-                const segId=edgeKey(e.a,e.b);
-                const line=LINES.find(l=>l.segments.includes(segId));
-                const dash=line?.style==='dashed'? '12 8' : line?.style==='dotted'? '3 7' : undefined;
-                return <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={line?.color ?? '#000'} strokeWidth={8} strokeLinecap="round" strokeDasharray={dash} />;
+                return (
+                  <g key={`path_${i}`}>
+                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#fff" strokeWidth={10} strokeLinecap="round" />
+                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#000" strokeWidth={6} strokeLinecap="round" />
+                  </g>
+                );
               })}
+              {vehiclePos && (
+                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={20} textAnchor="middle" dominantBaseline="middle">🚚</text>
+              )}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
+        </div>
+
+        <div className="w-80 bg-white border-l p-3 h-screen overflow-y-auto">
+          <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
+          <div className="space-y-2 text-sm">
+            <select value={startStation} onChange={e=>setStartStation(e.target.value)} className="w-full border p-1 rounded">
+              <option value="">Начальная станция</option>
+              {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+            </select>
+            <select value={endStation} onChange={e=>setEndStation(e.target.value)} className="w-full border p-1 rounded">
+              <option value="">Конечная станция</option>
+              {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
+            </select>
+            {pathOptions.length>1 && (
+              <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
+                {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
+              </select>
+            )}
+            {pathInfo.path.length>1 && (
+              <div className="pt-1 space-y-2">
+                <div className="font-medium">Протяжённость: {Math.round(pathInfo.length)}</div>
+                <div className="space-y-2">
+                  {routeDetails.map((g,i)=>(
+                    <div key={i} className="flex items-start gap-2 border rounded p-2">
+                      <div className="w-2 rounded" style={{background:g.line?.color}} />
+                      <div className="flex-1">
+                        <div className="font-medium">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
+                        {g.stations.length>2 && (
+                          <div className="text-xs text-gray-600">{g.stations.slice(1,-1).join(' → ')}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {!animating && (
+                  <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1">Поехали</button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -167,7 +167,7 @@ const CORRIDORS: Corridor[] = [
 
 function buildEdges(line: LineDef){ return line.segments.map(id=>{ const s=getSegment(id); return s?{a:s.from,b:s.to,lineId:line.id}:undefined; }).filter(Boolean) as Array<{a:string;b:string;lineId:string}>; }
 
-export default function App(){
+export default function MetroBranches(){
   const [scale,setScale]=useState(0.6);
   const [translateX,setTranslateX]=useState(300);
   const [translateY,setTranslateY]=useState(150);
@@ -227,6 +227,7 @@ export default function App(){
   }, [pathSegments, pathInfo.path, findLineBySegment]);
   const [animating, setAnimating] = useState(false);
   const [animProgress, setAnimProgress] = useState(0);
+
   const handleBuild = useCallback(() => {
     if(pathEdges.length===0) return;
     setBuilt(true);
@@ -250,6 +251,7 @@ export default function App(){
     });
     setAnimating(false);
   }, []);
+
   const handleGo = useCallback(() => {
     if(pathEdges.length===0) return;
     setAnimating(true);
@@ -288,6 +290,7 @@ export default function App(){
     }
     return null;
   },[animProgress,pathEdges,pos]);
+
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -307,44 +310,6 @@ export default function App(){
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
-  // === Legend / visibility controls ===
-  const handleToggleLine = useCallback((lineId: string) => {
-    setVisible(prev => ({ ...prev, [lineId]: prev[lineId] === false ? true : !prev[lineId] }));
-  }, []);
-
-  const handleToggleCorridor = useCallback((corridorId: string) => {
-    const corridor = CORRIDORS.find(c => c.id === corridorId);
-    if (!corridor) return;
-    const onCount = corridor.lineIds.filter(id => visible[id] !== false).length;
-    const turnOn = onCount < corridor.lineIds.length;
-    setVisible(prev => {
-      const next: Record<string, boolean> = { ...prev };
-      corridor.lineIds.forEach(id => { next[id] = turnOn; });
-      return next;
-    });
-  }, [visible]);
-
-  const handleSoloCorridor = useCallback((corridorId: string) => {
-    const corridor = CORRIDORS.find(c => c.id === corridorId);
-    if (!corridor) return;
-    setVisible(() => {
-      const next: Record<string, boolean> = {};
-      for (const l of LINES) next[l.id] = corridor.lineIds.includes(l.id);
-      return next;
-    });
-  }, []);
-
-  // Простой самотест (для панели статуса)
-  const selfTestResult = useMemo(() => {
-    const errors: string[] = [];
-    const lineIds = new Set(LINES.map(l => l.id));
-    for (const c of CORRIDORS) {
-      for (const id of c.lineIds) {
-        if (!lineIds.has(id)) errors.push(`В коридоре "${c.name}" отсутствует линия "${id}"`);
-      }
-    }
-    return { errors };
-  }, []);
 
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
@@ -358,59 +323,6 @@ export default function App(){
       </div>
 
       <div className="flex">
-        <div className="w-80 bg-white border-r p-3 h-screen overflow-y-auto">
-          <div className="mb-4">
-            <h3 className="font-bold text-base mb-2 text-gray-800">Маршрут</h3>
-            <div className="space-y-2 text-sm">
-              <select value={startStation} onChange={e=>setStartStation(e.target.value)} className="w-full border p-1 rounded">
-                <option value="">Начальная станция</option>
-                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
-              </select>
-              <select value={endStation} onChange={e=>setEndStation(e.target.value)} className="w-full border p-1 rounded">
-                <option value="">Конечная станция</option>
-                {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
-              </select>
-              {pathOptions.length>1 && (
-                <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
-                  {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
-                </select>
-              )}
-              {pathInfo.path.length>1 && (
-                <div className="pt-1 space-y-1">
-                  <div>Протяжённость: {Math.round(pathInfo.length)}</div>
-                  <div className="text-xs text-gray-600 break-words">{pathInfo.path.join(' → ')}</div>
-                  {routeDetails.length>0 && (
-                    <ol className="mt-2 text-xs text-gray-700 list-decimal pl-4 space-y-1">
-                      {routeDetails.map((g,i)=>(
-                        <li key={i}>
-                          Проезд по ветке <span style={{color:g.line?.color}}>{g.line?.name ?? '—'}</span> от {g.stations[0]} до {g.stations[g.stations.length-1]}
-                          {g.stations.length>2 && (
-                            <div className="ml-4">
-                              {g.stations.slice(1,-1).map(s=>(<div key={s}>{s}</div>))}
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-          <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
-          <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={handleToggleCorridor} soloCorridor={handleSoloCorridor} toggleLine={handleToggleLine} />
-          <div className="mt-4 border-t pt-3 text-xs">
-            <div className="font-semibold text-gray-800 mb-1">Статус</div>
-            {selfTestResult.errors.length>0 ? (
-              <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 space-y-1">
-                {selfTestResult.errors.map((e: string, i: number)=>(<div key={i}>• {e}</div>))}
-              </div>
-            ) : (
-              <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">✓ Проверки пройдены</div>
-            )}
-          </div>
-        </div>
-
         <div className="flex-1 overflow-hidden relative">
           <svg
             ref={svgRef}
@@ -447,30 +359,16 @@ export default function App(){
             <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
           )}
           <div className="space-y-2 text-sm">
-            <select
-              value={startStation}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStartStation(e.target.value)}
-              disabled={built}
-              className="w-full border p-1 rounded"
-            >
+            <select value={startStation} onChange={e=>setStartStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
               <option value="">🚩 Откуда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
-            <select
-              value={endStation}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEndStation(e.target.value)}
-              disabled={built}
-              className="w-full border p-1 rounded"
-            >
+            <select value={endStation} onChange={e=>setEndStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
               <option value="">🏁 Куда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
             {pathOptions.length>1 && !built && (
-              <select
-                value={pathIndex}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPathIndex(Number(e.target.value))}
-                className="w-full border p-1 rounded"
-              >
+              <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
                 {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
               </select>
             )}
@@ -534,76 +432,4 @@ function StationsAndLabels({stations,pos,labels}:{stations:string[]; pos:Record<
         <text x={lab.x} y={lab.y} fontSize={13} textAnchor={lab.anchor} stroke="#fff" strokeWidth={3} paintOrder="stroke" fill="#111">{name}</text>
       </g>); })}
   </>;
-}
-
-type LegendProps = {
-  CORRIDORS: Corridor[];
-  LINES: LineDef[];
-  visible: Record<string, boolean>;
-  toggleCorridor: (corridorId: string) => void;
-  soloCorridor: (corridorId: string) => void;
-  toggleLine: (lineId: string) => void;
-};
-
-function LegendCorridors({
-  CORRIDORS,
-  LINES,
-  visible,
-  toggleCorridor,
-  soloCorridor,
-  toggleLine,
-}: LegendProps) {
-  return (
-    <div className="space-y-3 text-sm">
-      {CORRIDORS.map(c => {
-        const lines = LINES.filter(l => c.lineIds.includes(l.id));
-        const enabledCount = lines.filter(l => visible[l.id] !== false).length;
-        const allOn = enabledCount === lines.length;
-        const someOn = enabledCount > 0 && !allOn;
-
-        return (
-          <div key={c.id} className="border rounded p-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => toggleCorridor(c.id)}
-                className="w-4 h-4 border rounded flex items-center justify-center"
-                title={allOn ? "Выключить коридор" : "Включить коридор"}
-                aria-pressed={allOn}
-              >
-                {allOn ? "✓" : someOn ? "–" : ""}
-              </button>
-              <div className="w-3 h-3 rounded" style={{ background: c.color ?? "#999" }} />
-              <div className="font-medium">{c.name}</div>
-              <button
-                onClick={() => soloCorridor(c.id)}
-                className="ml-auto text-xs px-2 py-0.5 border rounded hover:bg-gray-50"
-                title="Показать только этот коридор"
-              >
-                Solo
-              </button>
-            </div>
-
-            <div className="mt-2 pl-6 space-y-1">
-              {lines.map(l => {
-                const on = visible[l.id] !== false;
-                return (
-                  <label key={l.id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => toggleLine(l.id)}
-                    />
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-2 h-2 rounded" style={{ background: l.color }} />
-                      {l.name}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }

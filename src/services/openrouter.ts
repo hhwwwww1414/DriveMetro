@@ -3,9 +3,6 @@ import { BASE_POS } from "../models/network";
 export type LineInfo = { id: string; stations: string[] };
 export type AiRoute = { path: string[]; length: number; description: string };
 
-const MAIN_HUBS = ["Москва","Ростов-на-Дону","Тольятти","Волгоград","Уфа","Екатеринбург","Тюмень","Набережные Челны","Омск"];
-const EXTRA_HUBS = ["Новосибирск","Санкт-Петербург","Казань"];
-
 function segId(a: string, b: string){
   return a < b ? `${a}__${b}` : `${b}__${a}`;
 }
@@ -31,7 +28,76 @@ function computeLength(route: string[]): number{
   return len;
 }
 
+function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
+  const intersections = new Map<string, string[]>();
+  for (let i = 0; i < lines.length; i++) {
+    const l1 = lines[i];
+    for (let j = i + 1; j < lines.length; j++) {
+      const l2 = lines[j];
+      const common = l1.stations.filter((c) => l2.stations.includes(c));
+      if (common.length === 0) continue;
+      for (const city of common) {
+        if (!intersections.has(city)) intersections.set(city, []);
+        const arr = intersections.get(city)!;
+        if (!arr.includes(l1.id)) arr.push(l1.id);
+        if (!arr.includes(l2.id)) arr.push(l2.id);
+      }
+    }
+  }
+
+  const linesText = lines
+    .map((l) => `${l.id}: ${l.stations.join(" → ")}`)
+    .join("\n");
+
+  const intersectionsText = Array.from(intersections.entries())
+    .map(([city, ids]) => `${city}: [${ids.join(", ")}]`)
+    .join("\n");
+
+  const used = new Set<string>();
+  lines.forEach((l) => l.stations.forEach((s) => used.add(s)));
+  const positionsText = Array.from(used)
+    .map((city) => {
+      const pos = BASE_POS[city];
+      return pos ? `${city}: (${pos.x}, ${pos.y})` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return [
+    `Построй 2-3 оптимальных маршрута из "${start}" в "${end}".`,
+    "",
+    "КРИТИЧЕСКИ ВАЖНО:",
+    "1. Используй ТОЛЬКО координаты городов для понимания географии",
+    "2. Города в маршруте должны идти в логической географической последовательности",
+    "3. Переходы между ветками ТОЛЬКО в городах где они пересекаются",
+    "4. Маршрут туда и обратно ОДИНАКОВЫЙ (только в обратном порядке)",
+    "",
+    "КООРДИНАТЫ ГОРОДОВ:",
+    positionsText,
+    "",
+    "ВЕТКИ С ГОРОДАМИ:",
+    linesText,
+    "",
+    "ПЕРЕСЕЧЕНИЯ ВЕТОК (где можно переходить между ветками):",
+    intersectionsText,
+    "",
+    "АЛГОРИТМ ПОСТРОЕНИЯ:",
+    "1. Найди стартовый город в ветках",
+    "2. Определи направление движения по координатам (к целевому городу)",
+    "3. Следуй по ветке до города-пересечения (если нужно сменить ветку)",
+    "4. Смени ветку ТОЛЬКО в городе-пересечении",
+    "5. Продолжай до цели",
+    "",
+    "ПРИМЕРЫ ПРАВИЛЬНЫХ ПЕРЕХОДОВ:",
+    "Москва→Владивосток: Москва (MSK-NCH-SALAD) → Набережные Челны (переход на OMSK-NCH-IZH) → Екатеринбург (переход на SRG-EKB) → Тюмень (переход на OMSK-VVO-SALAD) → Владивосток",
+    "",
+    "Верни СТРОГО JSON:",
+    '{"routes":[{"route":["Город1","Город2"],"branches":["ветка1","ветка2"],"description":"краткое описание"}]}'
+  ].join("\n");
+}
+
 function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
+  if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
   const cities = new Set(Object.keys(BASE_POS));
   const segments = buildSegmentSet(lines);
@@ -53,18 +119,7 @@ function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
 
 export async function aiSuggestRoutes(start: string, end: string, lines: LineInfo[]): Promise<AiRoute[]> {
   const apiKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
-  const linesText = lines.map(l=>`${l.id}: ${l.stations.join(" -> ")}`).join("\n");
-  const prompt = [
-    `Найди 2-3 оптимальных маршрута из ${start} в ${end}.`,
-    "Используй только существующие ветки.",
-    "Основные хабы: "+MAIN_HUBS.join(", "),
-    "Дополнительные хабы: "+EXTRA_HUBS.join(", "),
-    "Приоритетная ветка: Москва-Владивосток.",
-    "Список веток с городами:",
-    linesText,
-    "Верни JSON массив с маршрутами формата:",
-    '{"route":["Город1","Город2"],"branches":["ID_ветки"],"description":"..."}'
-  ].join("\n");
+  const prompt = buildPrompt(start, end, lines);
 
   try{
     const body = {
@@ -73,7 +128,7 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
       messages: [
         {
           role: "system",
-          content: "Ты помощник по построению маршрутов. Отвечай только JSON.",
+          content: "Ты помощник по построению маршрутов. Отвечай строго JSON без дополнительных пояснений.",
         },
         { role: "user", content: prompt },
       ],

@@ -125,6 +125,7 @@ export function stationsFromSegments(ids: string[]): string[] {
     }
   }
   return result;
+<<<<<<< HEAD
 }
 
 
@@ -218,4 +219,6 @@ export function findPathsFromGraph(start: string, end: string, graph: Map<string
 export function findPath(start: string, end: string){
   const [best] = findPaths(start, end, 1);
   return best ?? { path: [], length: Infinity };
+=======
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
 }

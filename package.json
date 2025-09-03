@@ -11,7 +11,10 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+<<<<<<< HEAD
     "papaparse": "^5.4.1",
+=======
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -1,10 +1,17 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
+<<<<<<< HEAD
 import { BASE_POS, segmentsFromStations, getSegment, type XY, buildGraphFromLines, findPathsFromGraph, stationsFromSegments } from "./models/network";
 import { aiSuggestRoutes, type LineInfo, type AiRoute } from "./services/openrouter";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
 type PathOption = { path: string[]; length: number; description?: string };
+=======
+import { BASE_POS, segmentsFromStations, getSegment, type XY } from "./models/network";
+
+type LineStyle = 'solid' | 'dashed' | 'dotted';
+type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
 
 const BG_URL = import.meta.env.BASE_URL + 'bg.jpg';
 const STORAGE_VISIBLE = 'metro_lines_visibility_v1';
@@ -212,6 +219,7 @@ export default function MetroBranches(){
   const svgRef = useRef<SVGSVGElement>(null);
   const labels = useMemo(()=>placeLabels(stations,pos,13,scale),[scale]);
 
+<<<<<<< HEAD
   const [startStation, setStartStation] = useState<string>("");
   const [endStation, setEndStation] = useState<string>("");
   const [built, setBuilt] = useState(false);
@@ -376,6 +384,8 @@ export default function MetroBranches(){
     return null;
   },[animProgress,pathEdges,pos]);
 
+=======
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -422,6 +432,10 @@ export default function MetroBranches(){
   useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('touchstart',handleTouchStart,{passive:false}); el.addEventListener('touchmove',handleTouchMove,{passive:false}); el.addEventListener('touchend',handleTouchEnd,{passive:false}); el.addEventListener('touchcancel',handleTouchEnd,{passive:false}); return ()=>{ el.removeEventListener('touchstart',handleTouchStart); el.removeEventListener('touchmove',handleTouchMove); el.removeEventListener('touchend',handleTouchEnd); el.removeEventListener('touchcancel',handleTouchEnd); }; },[handleTouchStart,handleTouchMove,handleTouchEnd]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
       <div className="bg-white border-b p-3 flex items-center gap-2">
@@ -437,6 +451,10 @@ export default function MetroBranches(){
         <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-r p-3 h-screen overflow-y-auto shadow-lg">
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
           <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} showAll={showAllCorridors} hideAll={hideAllCorridors} />
+<<<<<<< HEAD
+=======
+
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
         </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
@@ -454,6 +472,7 @@ export default function MetroBranches(){
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               {showBg && <MapImage blur={blur} />}
               <MapGrid />
+<<<<<<< HEAD
               {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
               {built && variantEdges.map((edges,idx)=>visibleRoutes[idx] && edges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
@@ -483,6 +502,12 @@ export default function MetroBranches(){
               <div className="truck-drive text-4xl">🚛</div>
             </div>
           )}
+=======
+              <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
+              <StationsAndLabels stations={stations} pos={pos} labels={labels} />
+            </g>
+          </svg>
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
           <div className="absolute bottom-2 right-2 bg-white/80 p-2 rounded shadow space-y-1">
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={showBg} onChange={e=>setShowBg(e.target.checked)} />
@@ -492,6 +517,7 @@ export default function MetroBranches(){
             <input type="range" min={0} max={100} value={blur} onChange={e=>setBlur(Number(e.target.value))} className="w-32" disabled={!showBg} />
           </div>
         </div>
+<<<<<<< HEAD
         <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-l p-3 h-screen overflow-y-auto relative shadow-lg">
           {built && (
             <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
@@ -566,6 +592,8 @@ export default function MetroBranches(){
             )}
           </div>
         </div>
+=======
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
       </div>
     </div>
   );
@@ -650,6 +678,10 @@ function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorrido
                   const isOn = visible[id] !== false;
                   return (
                     <div key={id} className="flex items-center gap-2 text-xs transition-opacity" style={{opacity:isOn?1:0.4}}>
+<<<<<<< HEAD
+=======
+
+>>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
                       <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
                       <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
                       <div title={l.name}>{l.name}</div>

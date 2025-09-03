@@ -60,6 +60,15 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   const intersectionsText = Array.from(intersections.entries())
     .map(([city, ids]) => `${city}: [${ids.join(", ")}]`)
     .join("\n");
+  const segmentsText = lines
+    .map(l => {
+      const edges: string[] = [];
+      for (let i = 0; i < l.stations.length - 1; i++) {
+        edges.push(`${l.stations[i]}-${l.stations[i + 1]}`);
+      }
+      return `${l.id}: ${edges.join(", ")}`;
+    })
+    .join("\n");
 
   const used = new Set<string>();
   lines.forEach(l => l.stations.forEach(s => used.add(s)));
@@ -79,7 +88,7 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "2. Каждый маршрут строится только по соседним станциям ветки: нельзя перескакивать через города.",
     "3. Можно двигаться по веткам в любом направлении.",
     "4. Переход между ветками разрешён только в городах‑пересечениях.",
-    "5. Каждая пара {from,to} должна быть двумя последовательными станциями заявленной ветки.",
+    "5. Каждая пара {from,to} должна быть двумя последовательными станциями заявленной ветки и входить в список допустимых сегментов.",
     "6. Указывай ВСЕ промежуточные станции маршрута и не повторяй города в пределах одного маршрута.",
     `7. Маршрут обязан начинаться строго в "${start}" и заканчиваться строго в "${end}".`,
     "8. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
@@ -99,6 +108,9 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "",
     "ПЕРЕСЕЧЕНИЯ ВЕТОК:",
     intersectionsText,
+    "",
+    "ДОПУСТИМЫЕ СЕГМЕНТЫ ПО ВЕТКАМ (используй только их):",
+    segmentsText,
     "",
     "Верни только JSON без пояснений.",
   ].join("\n");
@@ -213,4 +225,3 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
     return [];
   }
 }
-

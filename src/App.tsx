@@ -375,7 +375,8 @@ export default function MetroBranches(){
   },[scale,translateX,translateY]);
 
   const [lastMouse,setLastMouse]=useState({x:0,y:0});
-  const handleWheel = useCallback((e:React.WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  const handleWheel = useCallback((e:WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('wheel',handleWheel,{passive:false}); return ()=>el.removeEventListener('wheel',handleWheel); },[handleWheel]);
   const handleMouseDown = useCallback((e:React.MouseEvent)=>{ setIsDragging(true); setLastMouse({x:e.clientX,y:e.clientY}); },[]);
   const handleMouseMove = useCallback((e:React.MouseEvent)=>{ if(!isDragging) return; const dx=e.clientX-lastMouse.x; const dy=e.clientY-lastMouse.y; setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x:e.clientX,y:e.clientY}); },[isDragging,lastMouse]);
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
@@ -404,7 +405,6 @@ export default function MetroBranches(){
             ref={svgRef}
             width={containerWidth}
             height={containerHeight}
-            onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

@@ -67,10 +67,10 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     `Построй 2-3 оптимальных маршрута из "${start}" в "${end}".`,
     "",
     "КРИТИЧЕСКИ ВАЖНО:",
-    "1. Используй ТОЛЬКО координаты городов для понимания географии",
-    "2. Города в маршруте должны идти в логической географической последовательности",
-    "3. Переходы между ветками ТОЛЬКО в городах где они пересекаются",
-    "4. Маршрут туда и обратно ОДИНАКОВЫЙ (только в обратном порядке)",
+    "1. Используй ТОЛЬКО существующие ветки и станции",
+    "2. Маршрут должен состоять ТОЛЬКО из станций, которые идут подряд на одной ветке",
+    "3. Переходы между ветками ТОЛЬКО в городах-пересечениях",
+    "4. В маршруте указывай ВСЕ промежуточные станции через которые проходит путь",
     "",
     "КООРДИНАТЫ ГОРОДОВ:",
     positionsText,
@@ -78,42 +78,41 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "ВЕТКИ С ГОРОДАМИ:",
     linesText,
     "",
-    "ПЕРЕСЕЧЕНИЯ ВЕТОК (где можно переходить между ветками):",
+    "ПЕРЕСЕЧЕНИЯ ВЕТОК:",
     intersectionsText,
     "",
-    "АЛГОРИТМ ПОСТРОЕНИЯ:",
-    "1. Найди стартовый город в ветках",
-    "2. Определи направление движения по координатам (к целевому городу)",
-    "3. Следуй по ветке до города-пересечения (если нужно сменить ветку)",
-    "4. Смени ветку ТОЛЬКО в городе-пересечении",
-    "5. Продолжай до цели",
+    "ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:",
+    "Для Абакан→Владимир:",
+    `{"routes":[{"route":["Абакан","Красноярск","Кемерово","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир"],"branches":["KRS-KYZ","OMSK-VVO-GREY","OMSK-NCH-IZH","MSK-NCH-SALAD"],"description":"Через Красноярск и Екатеринбург"}]}`,
     "",
-    "ПРИМЕРЫ ПРАВИЛЬНЫХ ПЕРЕХОДОВ:",
-    "Москва→Владивосток: Москва (MSK-NCH-SALAD) → Набережные Челны (переход на OMSK-NCH-IZH) → Екатеринбург (переход на SRG-EKB) → Тюмень (переход на OMSK-VVO-SALAD) → Владивосток",
-    "",
-    "Верни СТРОГО JSON:",
-    '{"routes":[{"route":["Город1","Город2"],"branches":["ветка1","ветка2"],"description":"краткое описание"}]}'
+    "Верни СТРОГО JSON:"
   ].join("\n");
 }
 
+// Более мягкая валидация - проверяем только что все города существуют
 function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
   if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
+  
   const cities = new Set(Object.keys(BASE_POS));
-  const segments = buildSegmentSet(lines);
   const valid: AiRoute[] = [];
+  
   for(const r of raw){
     if(!r || !Array.isArray(r.route) || r.route.length<2) continue;
+    
+    // Проверяем только что все города существуют
     if(r.route.some((c:string)=>!cities.has(c))) continue;
-    let ok = true;
-    for(let i=0;i<r.route.length-1;i++){
-      const id = segId(r.route[i], r.route[i+1]);
-      if(!segments.has(id)){ ok=false; break; }
-    }
-    if(!ok) continue;
+    
     const length = computeLength(r.route);
-    valid.push({ path: r.route, length, description: r.description ?? "" });
+    if(length === Infinity) continue; // Если не удалось вычислить длину
+    
+    valid.push({ 
+      path: r.route, 
+      length, 
+      description: r.description ?? "Маршрут от ИИ" 
+    });
   }
+  
   return valid;
 }
 

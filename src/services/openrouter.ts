@@ -1,9 +1,41 @@
 import { BASE_POS } from "../models/network";
+import Papa from "papaparse";
 
 export type LineInfo = { id: string; stations: string[] };
 export type AiRoute = { path: string[]; length: number; description: string };
 
 type AiSegment = { from: string; to: string; branch: string };
+
+const CURATED_URL = import.meta.env.BASE_URL + "od_paths_curated.csv";
+let curatedCache: Map<string, string[]> | null = null;
+
+async function getCuratedRoute(start: string, end: string): Promise<string[] | undefined>{
+  if(!curatedCache){
+    try{
+      const res = await fetch(CURATED_URL);
+      if(res.ok){
+        const text = await res.text();
+        const parsed = Papa.parse(text, {header:true, skipEmptyLines:true}) as any;
+        curatedCache = new Map();
+        for(const row of parsed.data as any[]){
+          const origin = row.origin?.trim();
+          const destination = row.destination?.trim();
+          const p = row.path as string | undefined;
+          if(!origin || !destination || !p) continue;
+          const stations = p.split("—").map((s: string)=>s.trim()).filter(Boolean);
+          if(stations.length && stations[0]===origin && stations[stations.length-1]===destination){
+            curatedCache.set(`${origin}|${destination}`, stations);
+          }
+        }
+      }else{
+        curatedCache = new Map();
+      }
+    }catch{
+      curatedCache = new Map();
+    }
+  }
+  return curatedCache.get(`${start}|${end}`);
+}
 
 function segId(a: string, b: string){
   return `${a}__${b}`;
@@ -219,6 +251,19 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
   const apiKey = (import.meta as any).env?.VITE_OPENROUTER_API_KEY || "";
   const prompt = buildPrompt(start, end, lines);
 
+  const out: AiRoute[] = [];
+  try{
+    const curated = await getCuratedRoute(start, end);
+    if(curated){
+      const length = computeLength(curated);
+      if(length !== Infinity){
+        out.push({ path: curated, length, description: "Маршрут из базы" });
+      }
+    }
+  }catch(err){
+    console.warn("curated routes error", err);
+  }
+
   try{
     const body = {
       model: "openai/gpt-4o-mini",
@@ -249,9 +294,10 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
     }
     const parsed = JSON.parse(text);
     console.log("AI raw response", JSON.stringify(parsed));
-    return validateRoutes(parsed, lines, start, end);
+    out.push(...validateRoutes(parsed, lines, start, end));
   }catch(err){
     console.error("AI route error", err);
-    return [];
   }
+
+  return out;
 }

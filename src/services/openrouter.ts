@@ -32,6 +32,7 @@ function computeLength(route: string[]): number{
 }
 
 function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
+  if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
   const cities = new Set(Object.keys(BASE_POS));
   const segments = buildSegmentSet(lines);

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { BASE_POS, segmentsFromStations, getSegment, type XY, findPaths, stationsFromSegments } from "./models/network";
+import { BASE_POS, segmentsFromStations, getSegment, type XY, buildGraphFromLines, findPathsFromGraph, stationsFromSegments } from "./models/network";
 import { aiSuggestRoutes, type LineInfo } from "./services/openrouter";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
@@ -223,8 +223,9 @@ export default function MetroBranches(){
 
   const defaultPathOptions = useMemo(() => {
     if(!startStation || !endStation) return [] as Array<{path:string[]; length:number}>;
-    return findPaths(startStation, endStation, 5);
-  }, [startStation, endStation]);
+    const activeGraph = buildGraphFromLines(activeLines);
+    return findPathsFromGraph(startStation, endStation, activeGraph, 5);
+  }, [startStation, endStation, activeLines]);
 
   const pathOptions = useMemo(() => {
     return [...aiOptions, ...defaultPathOptions];

@@ -42,30 +42,29 @@ function computeLength(route: string[]): number{
 
 function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   const interMap = new Map<string, Set<string>>();
+  const direct = new Map<string, string[]>();
   for(const l of lines){
+    for(let i=0;i<l.stations.length-1;i++){
+      const a = l.stations[i];
+      const b = l.stations[i+1];
+      if(!direct.has(a)) direct.set(a, []);
+      if(!direct.has(b)) direct.set(b, []);
+      direct.get(a)!.push(`${b} (${l.id})`);
+      direct.get(b)!.push(`${a} (${l.id})`);
+    }
     for(const city of l.stations){
       if(!interMap.has(city)) interMap.set(city, new Set());
       interMap.get(city)!.add(l.id);
     }
   }
+  const connectionsText = Array.from(direct.entries())
+    .map(([city, cons]) => `${city}: ${cons.join(", ")}`)
+    .join("\n");
   const intersectionsText = Array.from(interMap.entries())
     .filter(([, ids]) => ids.size > 1)
     .map(([city, ids]) => `${city}: [${Array.from(ids).join(", ")}]`)
     .join("\n");
-
   const linesText = lines.map(l => `${l.id}: ${l.stations.join(" → ")}`).join("\n");
-
-  const allowedSegments = lines.flatMap(l => {
-    const segs: Array<{ from: string; to: string; branch: string }> = [];
-    for (let i = 0; i < l.stations.length - 1; i++) {
-      const a = l.stations[i];
-      const b = l.stations[i + 1];
-      segs.push({ from: a, to: b, branch: l.id });
-      segs.push({ from: b, to: a, branch: l.id });
-    }
-    return segs;
-  });
-  console.log("allowedSegments", allowedSegments);
 
   const used = new Set<string>();
   lines.forEach(l => l.stations.forEach(s => used.add(s)));
@@ -80,16 +79,16 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   return [
     `Построй 2-3 оптимальных маршрута из "${start}" в "${end}".`,
     "",
-    "Правила:",
-    "1. Используй ТОЛЬКО существующие ветки и станции из списков ниже.",
-    "2. Каждый маршрут строится только по соседним станциям ветки: нельзя перескакивать через города.",
-    "3. Можно двигаться по веткам в любом направлении.",
-    "4. Переход между ветками разрешён только в городах‑пересечениях.",
-    "5. Указывай ВСЕ промежуточные станции маршрута и не повторяй города в пределах одного маршрута.",
-    `6. Маршрут обязан начинаться строго в "${start}" и заканчиваться строго в "${end}".`,
-    "7. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
-    '8. Если маршрут построить нельзя, верни {"routes":[]}',
-    "9. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
+    "КРИТИЧЕСКИ ВАЖНО:",
+    "1. Можно двигаться только между СОСЕДНИМИ городами в рамках одной ветки!",
+    "2. Переход между ветками возможен только в городах-пересечениях.",
+    "3. Проверяй каждый сегмент - он должен существовать в указанной ветке!",
+    "4. Указывай ВСЕ промежуточные станции и не повторяй города.",
+    `5. Маршрут обязан начинаться в "${start}" и заканчиваться в "${end}".`,
+    '6. Если маршрут построить нельзя, верни {"routes":[]}',
+    "",
+    "ПРЯМЫЕ СОЕДИНЕНИЯ ГОРОДОВ:",
+    connectionsText,
     "",
     "Формат ответа:",
     '{"routes":[{"segments":[{"from":"Город1","to":"Город2","branch":"ID_ветки"}],"description":"..."}]}',
@@ -105,8 +104,28 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "ПЕРЕСЕЧЕНИЯ ВЕТОК:",
     intersectionsText,
     "",
+    "ПРИМЕРЫ НЕДОПУСТИМЫХ ПЕРЕХОДОВ:",
+    "❌ Кызыл → Элиста (эти города не соединены напрямую)",
+    "❌ Абакан → Волгоград (эти города в разных ветках без пересечения)",
+    "",
+    "ПРИМЕРЫ ПРАВИЛЬНЫХ ПЕРЕХОДОВ:",
+    "✅ Абакан → Красноярск (соседи в ветке KRS-KYZ)",
+    "✅ Красноярск → Кызыл (соседи в ветке KRS-KYZ)",
+    "",
     "Верни только JSON без пояснений.",
   ].join("\n");
+}
+
+function canReachDirectly(from: string, to: string, lines: LineInfo[]): boolean {
+  for(const line of lines){
+    const stations = line.stations;
+    const fromIdx = stations.indexOf(from);
+    const toIdx = stations.indexOf(to);
+    if(fromIdx !== -1 && toIdx !== -1 && Math.abs(fromIdx - toIdx) === 1){
+      return true;
+    }
+  }
+  return false;
 }
 
 // Строгая валидация: проверяем существование городов, сегментов и корректность переходов
@@ -116,6 +135,20 @@ function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string)
 
   const cities = new Set(Object.keys(BASE_POS));
   const { segsByLine, intersections } = buildMaps(lines);
+  console.log("=== ВАЛИДАЦИЯ МАРШРУТОВ ИИ ===");
+  console.log("Доступные линии:", lines.map(l => `${l.id}: ${l.stations.join(" → ")}`));
+  const allowedTransitions = new Map<string, Set<string>>();
+  for(const line of lines){
+    for(let i=0;i<line.stations.length-1;i++){
+      const a = line.stations[i];
+      const b = line.stations[i+1];
+      if(!allowedTransitions.has(a)) allowedTransitions.set(a, new Set());
+      if(!allowedTransitions.has(b)) allowedTransitions.set(b, new Set());
+      allowedTransitions.get(a)!.add(b);
+      allowedTransitions.get(b)!.add(a);
+    }
+  }
+  console.log("Допустимые переходы:", Array.from(allowedTransitions.entries()));
   const valid: AiRoute[] = [];
 
   for(const r of raw){
@@ -134,6 +167,10 @@ function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string)
       }
       if(!cities.has(seg.from) || !cities.has(seg.to)){
         console.warn("AI: неизвестный город", `${seg.from}→${seg.to}`); ok=false; break;
+      }
+      if(!canReachDirectly(seg.from, seg.to, lines)){
+        console.warn("AI: нет прямого соединения между", seg.from, "и", seg.to);
+        ok=false; break;
       }
       const segSet = segsByLine.get(seg.branch);
       if(!segSet || !segSet.has(segId(seg.from, seg.to))){

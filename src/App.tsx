@@ -384,13 +384,30 @@ export default function MetroBranches(){
   },[scale,translateX,translateY]);
 
   const [lastMouse,setLastMouse]=useState({x:0,y:0});
-  const handleWheel = useCallback((e:WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  const handleWheel = useCallback((e:WheelEvent)=>{
+    if(e.cancelable) e.preventDefault();
+    const rect=svgRef.current?.getBoundingClientRect();
+    if(!rect) return;
+    const mx=e.clientX-rect.left;
+    const my=e.clientY-rect.top;
+    const delta=e.deltaY>0?-0.1:0.1;
+    handleZoom(delta,mx,my);
+  },[handleZoom]);
   useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('wheel',handleWheel,{passive:false}); return ()=>el.removeEventListener('wheel',handleWheel); },[handleWheel]);
   const handleMouseDown = useCallback((e:React.MouseEvent)=>{ setIsDragging(true); setLastMouse({x:e.clientX,y:e.clientY}); },[]);
   const handleMouseMove = useCallback((e:React.MouseEvent)=>{ if(!isDragging) return; const dx=e.clientX-lastMouse.x; const dy=e.clientY-lastMouse.y; setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x:e.clientX,y:e.clientY}); },[isDragging,lastMouse]);
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
   const handleTouchStart = useCallback((e:TouchEvent)=>{ setIsDragging(true); const t=e.touches[0]; setLastMouse({x:t.clientX,y:t.clientY}); },[]);
-  const handleTouchMove = useCallback((e:TouchEvent)=>{ if(!isDragging) return; e.preventDefault(); const t=e.touches[0]; const dx=t.clientX-lastMouse.x; const dy=t.clientY-lastMouse.y; setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x:t.clientX,y:t.clientY}); },[isDragging,lastMouse]);
+  const handleTouchMove = useCallback((e:TouchEvent)=>{
+    if(!isDragging) return;
+    if(e.cancelable) e.preventDefault();
+    const t=e.touches[0];
+    const dx=t.clientX-lastMouse.x;
+    const dy=t.clientY-lastMouse.y;
+    setTranslateX(p=>p+dx);
+    setTranslateY(p=>p+dy);
+    setLastMouse({x:t.clientX,y:t.clientY});
+  },[isDragging,lastMouse]);
   const handleTouchEnd = useCallback(()=>{ setIsDragging(false); },[]);
   useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('touchstart',handleTouchStart,{passive:false}); el.addEventListener('touchmove',handleTouchMove,{passive:false}); el.addEventListener('touchend',handleTouchEnd,{passive:false}); el.addEventListener('touchcancel',handleTouchEnd,{passive:false}); return ()=>{ el.removeEventListener('touchstart',handleTouchStart); el.removeEventListener('touchmove',handleTouchMove); el.removeEventListener('touchend',handleTouchEnd); el.removeEventListener('touchcancel',handleTouchEnd); }; },[handleTouchStart,handleTouchMove,handleTouchEnd]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);

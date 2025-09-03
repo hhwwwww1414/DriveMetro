@@ -75,15 +75,6 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "",
     "Формат ответа:",
     '{"routes":[{"route":["Город1","Город2"],"description":"..."}]}',
-    "Правила:",
-    "1. Используй ТОЛЬКО существующие ветки и станции из списков ниже.",
-    "2. Каждый маршрут должен состоять только из последовательных станций одной ветки.",
-    "3. Переход между ветками разрешён только в городах‑пересечениях.",
-    "4. Указывай ВСЕ промежуточные станции маршрута.",
-    "5. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
-    "",
-    "Формат ответа:",
-    '{"routes":[{"route":["Город1","Город2"],"description":"..."}]}',
     "",
     "КООРДИНАТЫ ГОРОДОВ:",
     positionsText,
@@ -95,22 +86,17 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     intersectionsText,
     "",
     "Верни только JSON без пояснений.",
-    "Верни только JSON без пояснений.",
   ].join("\n");
 }
 
-// Строгая валидация: проверяем существование городов и допустимость сегментов
 // Строгая валидация: проверяем существование городов и допустимость сегментов
 function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
   if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
 
-
   const cities = new Set(Object.keys(BASE_POS));
   const allowedSegments = buildSegmentSet(lines);
-  const allowedSegments = buildSegmentSet(lines);
   const valid: AiRoute[] = [];
-
 
   for(const r of raw){
     if(!r || !Array.isArray(r.route) || r.route.length<2) continue;
@@ -131,26 +117,8 @@ function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
       path: route,
       length,
       description: r.description ?? "Маршрут от ИИ"
-
-    const route = r.route;
-    if(route.some((c:string)=>!cities.has(c))) continue;
-
-    let ok = true;
-    for(let i=1;i<route.length;i++){
-      if(!allowedSegments.has(segId(route[i-1], route[i]))){ ok=false; break; }
-    }
-    if(!ok) continue;
-
-    const length = computeLength(route);
-    if(length === Infinity) continue;
-
-    valid.push({
-      path: route,
-      length,
-      description: r.description ?? "Маршрут от ИИ"
     });
   }
-
 
   return valid;
 }

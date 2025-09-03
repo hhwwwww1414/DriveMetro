@@ -77,13 +77,18 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "Правила:",
     "1. Используй ТОЛЬКО существующие ветки и станции из списков ниже.",
     "2. Каждый маршрут должен состоять только из последовательных станций одной ветки.",
-    "3. Переход между ветками разрешён только в городах‑пересечениях.",
-    "4. Указывай ВСЕ промежуточные станции маршрута.",
-    "5. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
-    "6. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
+    "3. Можно двигаться по веткам в любом направлении.",
+    "4. Переход между ветками разрешён только в городах‑пересечениях.",
+    "5. Указывай ВСЕ промежуточные станции маршрута.",
+    "6. Маршрут обязан начинаться строго в \"" + start + "\" и заканчиваться строго в \"" + end + "\".",
+    "7. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
+    "8. Если маршрут построить нельзя, верни {\"routes\":[]}",
+    "9. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
     "",
     "Формат ответа:",
     '{"routes":[{"segments":[{"from":"Город1","to":"Город2","branch":"ID_ветки"}],"description":"..."}]}',
+    "Пример:",
+    '{"routes":[{"segments":[{"from":"Волгоград","to":"Элиста","branch":"MSK-VLG"},{"from":"Элиста","to":"Астрахань","branch":"VLG-ELI-AST-MAH"}],"description":"Пример оформления"}]}',
     "",
     "КООРДИНАТЫ ГОРОДОВ:",
     positionsText,
@@ -110,7 +115,7 @@ function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string)
   for(const r of raw){
     const segments: AiSegment[] | undefined = r?.segments;
     if(!Array.isArray(segments) || segments.length===0){
-      console.warn("AI: отсутствуют сегменты", r); continue;
+      console.warn("AI: отсутствуют сегменты", JSON.stringify(r)); continue;
     }
 
     let ok = true;
@@ -118,19 +123,19 @@ function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string)
     for(let i=0;i<segments.length;i++){
       const seg = segments[i];
       if(!seg || typeof seg.from!=="string" || typeof seg.to!=="string" || typeof seg.branch!=="string"){
-        console.warn("AI: некорректный формат сегмента", seg); ok=false; break;
+        console.warn("AI: некорректный формат сегмента", JSON.stringify(seg)); ok=false; break;
       }
       if(!cities.has(seg.from) || !cities.has(seg.to)){
-        console.warn("AI: неизвестный город", seg); ok=false; break;
+        console.warn("AI: неизвестный город", JSON.stringify(seg)); ok=false; break;
       }
       const segSet = segsByLine.get(seg.branch);
       if(!segSet || !segSet.has(segId(seg.from, seg.to))){
-        console.warn("AI: сегмент вне ветки", seg); ok=false; break;
+        console.warn("AI: сегмент вне ветки", JSON.stringify(seg)); ok=false; break;
       }
       if(i>0){
         const prev = segments[i-1];
         if(prev.to !== seg.from){
-          console.warn("AI: разрыв маршрута", prev, seg); ok=false; break;
+          console.warn("AI: разрыв маршрута", JSON.stringify(prev), JSON.stringify(seg)); ok=false; break;
         }
         if(prev.branch !== seg.branch){
           const inter = intersections.get(seg.from);
@@ -145,7 +150,7 @@ function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string)
     if(!ok) continue;
 
     if(path[0] !== start || path[path.length-1] !== end){
-      console.warn("AI: неверное начало/конец маршрута", path); continue;
+      console.warn("AI: неверное начало/конец маршрута", JSON.stringify(path)); continue;
     }
 
     const length = computeLength(path);
@@ -194,10 +199,11 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
       text = text.replace(/^```json\s*/i, "").replace(/^```\w*\s*/i, "").replace(/```$/, "");
     }
     const parsed = JSON.parse(text);
-    console.log("AI raw response", parsed);
+    console.log("AI raw response", JSON.stringify(parsed));
     return validateRoutes(parsed, lines, start, end);
   }catch(err){
     console.error("AI route error", err);
     return [];
   }
 }
+

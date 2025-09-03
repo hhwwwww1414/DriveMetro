@@ -66,11 +66,15 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   return [
     `Построй 2-3 оптимальных маршрута из "${start}" в "${end}".`,
     "",
-    "КРИТИЧЕСКИ ВАЖНО:",
-    "1. Используй ТОЛЬКО существующие ветки и станции",
-    "2. Маршрут должен состоять ТОЛЬКО из станций, которые идут подряд на одной ветке",
-    "3. Переходы между ветками ТОЛЬКО в городах-пересечениях",
-    "4. В маршруте указывай ВСЕ промежуточные станции через которые проходит путь",
+    "Правила:",
+    "1. Используй ТОЛЬКО существующие ветки и станции из списков ниже.",
+    "2. Каждый маршрут должен состоять только из последовательных станций одной ветки.",
+    "3. Переход между ветками разрешён только в городах‑пересечениях.",
+    "4. Указывай ВСЕ промежуточные станции маршрута.",
+    "5. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
+    "",
+    "Формат ответа:",
+    '{"routes":[{"route":["Город1","Город2"],"description":"..."}]}',
     "",
     "КООРДИНАТЫ ГОРОДОВ:",
     positionsText,
@@ -81,38 +85,41 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "ПЕРЕСЕЧЕНИЯ ВЕТОК:",
     intersectionsText,
     "",
-    "ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:",
-    "Для Абакан→Владимир:",
-    `{"routes":[{"route":["Абакан","Красноярск","Кемерово","Новосибирск","Омск","Тюмень","Екатеринбург","Набережные Челны","Казань","Чебоксары","Нижний Новгород","Владимир"],"branches":["KRS-KYZ","OMSK-VVO-GREY","OMSK-NCH-IZH","MSK-NCH-SALAD"],"description":"Через Красноярск и Екатеринбург"}]}`,
-    "",
-    "Верни СТРОГО JSON:"
+    "Верни только JSON без пояснений.",
   ].join("\n");
 }
 
-// Более мягкая валидация - проверяем только что все города существуют
+// Строгая валидация: проверяем существование городов и допустимость сегментов
 function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
   if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
-  
+
   const cities = new Set(Object.keys(BASE_POS));
+  const allowedSegments = buildSegmentSet(lines);
   const valid: AiRoute[] = [];
-  
+
   for(const r of raw){
     if(!r || !Array.isArray(r.route) || r.route.length<2) continue;
-    
-    // Проверяем только что все города существуют
-    if(r.route.some((c:string)=>!cities.has(c))) continue;
-    
-    const length = computeLength(r.route);
-    if(length === Infinity) continue; // Если не удалось вычислить длину
-    
-    valid.push({ 
-      path: r.route, 
-      length, 
-      description: r.description ?? "Маршрут от ИИ" 
+
+    const route = r.route;
+    if(route.some((c:string)=>!cities.has(c))) continue;
+
+    let ok = true;
+    for(let i=1;i<route.length;i++){
+      if(!allowedSegments.has(segId(route[i-1], route[i]))){ ok=false; break; }
+    }
+    if(!ok) continue;
+
+    const length = computeLength(route);
+    if(length === Infinity) continue;
+
+    valid.push({
+      path: route,
+      length,
+      description: r.description ?? "Маршрут от ИИ"
     });
   }
-  
+
   return valid;
 }
 

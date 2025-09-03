@@ -217,6 +217,7 @@ export default function MetroBranches(){
   const [aiOptions, setAiOptions] = useState<Array<{path:string[]; length:number; description:string}>>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string|null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
   const [visibleRoutes, setVisibleRoutes] = useState<boolean[]>([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
 
@@ -235,22 +236,29 @@ export default function MetroBranches(){
   }, [pathOptions.length]);
 
   useEffect(() => {
-    if(!startStation || !endStation){ setAiOptions([]); return; }
+    if(!startStation || !endStation){ setAiOptions([]); setDebugInfo(""); return; }
     let cancelled = false;
     (async () => {
       setAiLoading(true);
       setAiError(null);
+      setDebugInfo("🤖 Запрос к ИИ...");
       const lineInfo: LineInfo[] = LINES.map(l => ({ id: l.id, stations: stationsFromSegments(l.segments) }));
       try{
         const res = await aiSuggestRoutes(startStation, endStation, lineInfo);
         if(!cancelled){
           setAiOptions(res);
-          if(res.length===0) setAiError("ИИ не нашёл варианты");
+          if(res.length===0){
+            setAiError("ИИ не нашёл варианты");
+            setDebugInfo("⚠️ ИИ не нашёл маршруты");
+          }else{
+            setDebugInfo(`✅ Найдено вариантов: ${res.length}`);
+          }
         }
       }catch{
         if(!cancelled){
           setAiError("Ошибка ИИ");
           setAiOptions([]);
+          setDebugInfo("❌ Ошибка ИИ");
         }
       }finally{
         if(!cancelled) setAiLoading(false);
@@ -319,6 +327,7 @@ export default function MetroBranches(){
     setAnimating(false);
     setAiOptions([]);
     setAiError(null);
+    setDebugInfo("");
     setVisibleRoutes([]);
     setSelectedRoute(0);
   }, []);
@@ -375,7 +384,8 @@ export default function MetroBranches(){
   },[scale,translateX,translateY]);
 
   const [lastMouse,setLastMouse]=useState({x:0,y:0});
-  const handleWheel = useCallback((e:React.WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  const handleWheel = useCallback((e:WheelEvent)=>{ e.preventDefault(); const rect=svgRef.current?.getBoundingClientRect(); if(!rect) return; const mx=e.clientX-rect.left; const my=e.clientY-rect.top; const delta=e.deltaY>0?-0.1:0.1; handleZoom(delta,mx,my); },[handleZoom]);
+  useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('wheel',handleWheel,{passive:false}); return ()=>el.removeEventListener('wheel',handleWheel); },[handleWheel]);
   const handleMouseDown = useCallback((e:React.MouseEvent)=>{ setIsDragging(true); setLastMouse({x:e.clientX,y:e.clientY}); },[]);
   const handleMouseMove = useCallback((e:React.MouseEvent)=>{ if(!isDragging) return; const dx=e.clientX-lastMouse.x; const dy=e.clientY-lastMouse.y; setTranslateX(p=>p+dx); setTranslateY(p=>p+dy); setLastMouse({x:e.clientX,y:e.clientY}); },[isDragging,lastMouse]);
   const handleMouseUp = useCallback(()=>{ setIsDragging(false); },[]);
@@ -404,7 +414,6 @@ export default function MetroBranches(){
             ref={svgRef}
             width={containerWidth}
             height={containerHeight}
-            onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -471,7 +480,10 @@ export default function MetroBranches(){
               <div className="flex justify-center py-2"><div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" /></div>
             )}
             {aiError && (
-              <div className="text-red-600 text-center text-xs">{aiError}</div>
+              <div className="text-red-600 text-center text-xs p-2 bg-red-50 rounded border">{aiError}</div>
+            )}
+            {debugInfo && (
+              <div className="text-gray-500 text-center text-xs p-2">{debugInfo}</div>
             )}
             {!built && startStation && endStation && (
               <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1 transition-colors">Проложить</button>

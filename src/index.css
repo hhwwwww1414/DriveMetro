@@ -5,3 +5,15 @@
 html, body, #root {
   height: 100%;
 }
+
+@keyframes truck-drive {
+  0% { transform: translateX(-120px); }
+  100% { transform: translateX(1200px); }
+}
+
+.truck-drive {
+  position: absolute;
+  top: 50%;
+  left: -120px;
+  animation: truck-drive 4s linear infinite;
+}

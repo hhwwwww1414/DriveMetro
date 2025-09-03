@@ -76,19 +76,6 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
         response_format: { type: "json_object" },
-        messages:[
-          {role:"system", content:"Ты помощник по построению маршрутов. Отвечай только JSON."},
-          {role:"user", content: prompt}
-        ]
-      })
-    });
-    if(!res.ok) throw new Error(`status ${res.status}`);
-    const data = await res.json();
-    let text = data.choices?.[0]?.message?.content || "";
-    text = text.trim();
-    if(text.startsWith("```")){
-      text = text.replace(/^```json\s*/i, "").replace(/^```\w*\s*/i, "").replace(/```$/, "");
-    }
     const parsed = JSON.parse(text);
     return validateRoutes(parsed, lines);
   }catch(err){

@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { BASE_POS, segmentsFromStations, getSegment, type XY, findPaths } from "./models/network";
+import { BASE_POS, segmentsFromStations, getSegment, type XY, findPaths, stationsFromSegments } from "./models/network";
+import { aiSuggestRoutes, type LineInfo } from "./services/openrouter";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
@@ -214,13 +215,45 @@ export default function MetroBranches(){
   const [endStation, setEndStation] = useState<string>("");
   const [pathIndex, setPathIndex] = useState(0);
   const [built, setBuilt] = useState(false);
+  const [aiOptions, setAiOptions] = useState<Array<{path:string[]; length:number; description:string}>>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string|null>(null);
 
-  const pathOptions = useMemo(() => {
+  const defaultPathOptions = useMemo(() => {
     if(!startStation || !endStation) return [] as Array<{path:string[]; length:number}>;
     return findPaths(startStation, endStation, 5);
   }, [startStation, endStation]);
 
-  useEffect(() => { setPathIndex(0); }, [startStation, endStation]);
+  const pathOptions = useMemo(() => {
+    return [...aiOptions, ...defaultPathOptions];
+  }, [aiOptions, defaultPathOptions]);
+
+  useEffect(() => { setPathIndex(0); }, [startStation, endStation, pathOptions.length]);
+
+  useEffect(() => {
+    if(!startStation || !endStation){ setAiOptions([]); return; }
+    let cancelled = false;
+    (async () => {
+      setAiLoading(true);
+      setAiError(null);
+      const lineInfo: LineInfo[] = LINES.map(l => ({ id: l.id, stations: stationsFromSegments(l.segments) }));
+      try{
+        const res = await aiSuggestRoutes(startStation, endStation, lineInfo);
+        if(!cancelled){
+          setAiOptions(res);
+          if(res.length===0) setAiError("ИИ не нашёл варианты");
+        }
+      }catch{
+        if(!cancelled){
+          setAiError("Ошибка ИИ");
+          setAiOptions([]);
+        }
+      }finally{
+        if(!cancelled) setAiLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [startStation, endStation]);
 
   const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
   const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
@@ -266,6 +299,8 @@ export default function MetroBranches(){
     setEndStation('');
     setPathIndex(0);
     setAnimating(false);
+    setAiOptions([]);
+    setAiError(null);
   }, []);
 
   const handleGo = useCallback(() => {
@@ -400,6 +435,12 @@ export default function MetroBranches(){
               <option value="">🏁 Куда</option>
               {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
             </select>
+            {aiLoading && (
+              <div className="flex justify-center py-2"><div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" /></div>
+            )}
+            {aiError && (
+              <div className="text-red-600 text-center text-xs">{aiError}</div>
+            )}
             {pathOptions.length>1 && !built && (
               <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
                 {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}

@@ -3,18 +3,29 @@ import { BASE_POS } from "../models/network";
 export type LineInfo = { id: string; stations: string[] };
 export type AiRoute = { path: string[]; length: number; description: string };
 
+type AiSegment = { from: string; to: string; branch: string };
+
 function segId(a: string, b: string){
   return a < b ? `${a}__${b}` : `${b}__${a}`;
 }
 
-function buildSegmentSet(lines: LineInfo[]): Set<string>{
-  const set = new Set<string>();
+function buildMaps(lines: LineInfo[]){
+  const segsByLine = new Map<string, Set<string>>();
+  const intersections = new Map<string, Set<string>>();
   for(const l of lines){
+    const set = new Set<string>();
     for(let i=0;i<l.stations.length-1;i++){
-      set.add(segId(l.stations[i], l.stations[i+1]));
+      const a = l.stations[i];
+      const b = l.stations[i+1];
+      set.add(segId(a,b));
+      if(!intersections.has(a)) intersections.set(a, new Set());
+      if(!intersections.has(b)) intersections.set(b, new Set());
+      intersections.get(a)!.add(l.id);
+      intersections.get(b)!.add(l.id);
     }
+    segsByLine.set(l.id, set);
   }
-  return set;
+  return { segsByLine, intersections };
 }
 
 function computeLength(route: string[]): number{
@@ -30,33 +41,30 @@ function computeLength(route: string[]): number{
 
 function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   const intersections = new Map<string, string[]>();
-  for (let i = 0; i < lines.length; i++) {
+  for(let i=0;i<lines.length;i++){
     const l1 = lines[i];
-    for (let j = i + 1; j < lines.length; j++) {
+    for(let j=i+1;j<lines.length;j++){
       const l2 = lines[j];
-      const common = l1.stations.filter((c) => l2.stations.includes(c));
-      if (common.length === 0) continue;
-      for (const city of common) {
-        if (!intersections.has(city)) intersections.set(city, []);
+      const common = l1.stations.filter(c => l2.stations.includes(c));
+      if(common.length===0) continue;
+      for(const city of common){
+        if(!intersections.has(city)) intersections.set(city, []);
         const arr = intersections.get(city)!;
-        if (!arr.includes(l1.id)) arr.push(l1.id);
-        if (!arr.includes(l2.id)) arr.push(l2.id);
+        if(!arr.includes(l1.id)) arr.push(l1.id);
+        if(!arr.includes(l2.id)) arr.push(l2.id);
       }
     }
   }
 
-  const linesText = lines
-    .map((l) => `${l.id}: ${l.stations.join(" → ")}`)
-    .join("\n");
-
+  const linesText = lines.map(l => `${l.id}: ${l.stations.join(" → ")}`).join("\n");
   const intersectionsText = Array.from(intersections.entries())
     .map(([city, ids]) => `${city}: [${ids.join(", ")}]`)
     .join("\n");
 
   const used = new Set<string>();
-  lines.forEach((l) => l.stations.forEach((s) => used.add(s)));
+  lines.forEach(l => l.stations.forEach(s => used.add(s)));
   const positionsText = Array.from(used)
-    .map((city) => {
+    .map(city => {
       const pos = BASE_POS[city];
       return pos ? `${city}: (${pos.x}, ${pos.y})` : "";
     })
@@ -71,10 +79,11 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "2. Каждый маршрут должен состоять только из последовательных станций одной ветки.",
     "3. Переход между ветками разрешён только в городах‑пересечениях.",
     "4. Указывай ВСЕ промежуточные станции маршрута.",
-    "5. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
+    "5. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
+    "6. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
     "",
     "Формат ответа:",
-    '{"routes":[{"route":["Город1","Город2"],"description":"..."}]}',
+    '{"routes":[{"segments":[{"from":"Город1","to":"Город2","branch":"ID_ветки"}],"description":"..."}]}',
     "",
     "КООРДИНАТЫ ГОРОДОВ:",
     positionsText,
@@ -89,34 +98,63 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   ].join("\n");
 }
 
-// Строгая валидация: проверяем существование городов и допустимость сегментов
-function validateRoutes(raw: any, lines: LineInfo[]): AiRoute[]{
+// Строгая валидация: проверяем существование городов, сегментов и корректность переходов
+function validateRoutes(raw: any, lines: LineInfo[], start: string, end: string): AiRoute[]{
   if(raw && Array.isArray(raw.routes)) raw = raw.routes;
   if(!Array.isArray(raw)) return [];
 
   const cities = new Set(Object.keys(BASE_POS));
-  const allowedSegments = buildSegmentSet(lines);
+  const { segsByLine, intersections } = buildMaps(lines);
   const valid: AiRoute[] = [];
 
   for(const r of raw){
-    if(!r || !Array.isArray(r.route) || r.route.length<2) continue;
-
-    const route = r.route;
-    if(route.some((c:string)=>!cities.has(c))) continue;
+    const segments: AiSegment[] | undefined = r?.segments;
+    if(!Array.isArray(segments) || segments.length===0){
+      console.warn("AI: отсутствуют сегменты", r); continue;
+    }
 
     let ok = true;
-    for(let i=1;i<route.length;i++){
-      if(!allowedSegments.has(segId(route[i-1], route[i]))){ ok=false; break; }
+    const path: string[] = [segments[0].from];
+    for(let i=0;i<segments.length;i++){
+      const seg = segments[i];
+      if(!seg || typeof seg.from!=="string" || typeof seg.to!=="string" || typeof seg.branch!=="string"){
+        console.warn("AI: некорректный формат сегмента", seg); ok=false; break;
+      }
+      if(!cities.has(seg.from) || !cities.has(seg.to)){
+        console.warn("AI: неизвестный город", seg); ok=false; break;
+      }
+      const segSet = segsByLine.get(seg.branch);
+      if(!segSet || !segSet.has(segId(seg.from, seg.to))){
+        console.warn("AI: сегмент вне ветки", seg); ok=false; break;
+      }
+      if(i>0){
+        const prev = segments[i-1];
+        if(prev.to !== seg.from){
+          console.warn("AI: разрыв маршрута", prev, seg); ok=false; break;
+        }
+        if(prev.branch !== seg.branch){
+          const inter = intersections.get(seg.from);
+          if(!inter || !inter.has(prev.branch) || !inter.has(seg.branch)){
+            console.warn("AI: недопустимая смена ветки", seg.from, prev.branch, seg.branch); ok=false; break;
+          }
+        }
+      }
+      path.push(seg.to);
     }
+
     if(!ok) continue;
 
-    const length = computeLength(route);
+    if(path[0] !== start || path[path.length-1] !== end){
+      console.warn("AI: неверное начало/конец маршрута", path); continue;
+    }
+
+    const length = computeLength(path);
     if(length === Infinity) continue;
 
     valid.push({
-      path: route,
+      path,
       length,
-      description: r.description ?? "Маршрут от ИИ"
+      description: r.description ?? "Маршрут от ИИ",
     });
   }
 
@@ -156,7 +194,8 @@ export async function aiSuggestRoutes(start: string, end: string, lines: LineInf
       text = text.replace(/^```json\s*/i, "").replace(/^```\w*\s*/i, "").replace(/```$/, "");
     }
     const parsed = JSON.parse(text);
-    return validateRoutes(parsed, lines);
+    console.log("AI raw response", parsed);
+    return validateRoutes(parsed, lines, start, end);
   }catch(err){
     console.error("AI route error", err);
     return [];

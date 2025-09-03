@@ -217,6 +217,7 @@ export default function MetroBranches(){
   const [aiOptions, setAiOptions] = useState<Array<{path:string[]; length:number; description:string}>>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string|null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
   const [visibleRoutes, setVisibleRoutes] = useState<boolean[]>([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
 
@@ -235,22 +236,29 @@ export default function MetroBranches(){
   }, [pathOptions.length]);
 
   useEffect(() => {
-    if(!startStation || !endStation){ setAiOptions([]); return; }
+    if(!startStation || !endStation){ setAiOptions([]); setDebugInfo(""); return; }
     let cancelled = false;
     (async () => {
       setAiLoading(true);
       setAiError(null);
+      setDebugInfo("🤖 Запрос к ИИ...");
       const lineInfo: LineInfo[] = LINES.map(l => ({ id: l.id, stations: stationsFromSegments(l.segments) }));
       try{
         const res = await aiSuggestRoutes(startStation, endStation, lineInfo);
         if(!cancelled){
           setAiOptions(res);
-          if(res.length===0) setAiError("ИИ не нашёл варианты");
+          if(res.length===0){
+            setAiError("ИИ не нашёл варианты");
+            setDebugInfo("⚠️ ИИ не нашёл маршруты");
+          }else{
+            setDebugInfo(`✅ Найдено вариантов: ${res.length}`);
+          }
         }
       }catch{
         if(!cancelled){
           setAiError("Ошибка ИИ");
           setAiOptions([]);
+          setDebugInfo("❌ Ошибка ИИ");
         }
       }finally{
         if(!cancelled) setAiLoading(false);
@@ -319,6 +327,7 @@ export default function MetroBranches(){
     setAnimating(false);
     setAiOptions([]);
     setAiError(null);
+    setDebugInfo("");
     setVisibleRoutes([]);
     setSelectedRoute(0);
   }, []);
@@ -471,7 +480,10 @@ export default function MetroBranches(){
               <div className="flex justify-center py-2"><div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" /></div>
             )}
             {aiError && (
-              <div className="text-red-600 text-center text-xs">{aiError}</div>
+              <div className="text-red-600 text-center text-xs p-2 bg-red-50 rounded border">{aiError}</div>
+            )}
+            {debugInfo && (
+              <div className="text-gray-500 text-center text-xs p-2">{debugInfo}</div>
             )}
             {!built && startStation && endStation && (
               <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1 transition-colors">Проложить</button>

@@ -213,11 +213,12 @@ export default function MetroBranches(){
 
   const [startStation, setStartStation] = useState<string>("");
   const [endStation, setEndStation] = useState<string>("");
-  const [pathIndex, setPathIndex] = useState(0);
   const [built, setBuilt] = useState(false);
   const [aiOptions, setAiOptions] = useState<Array<{path:string[]; length:number; description:string}>>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string|null>(null);
+  const [visibleRoutes, setVisibleRoutes] = useState<boolean[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState(0);
 
   const defaultPathOptions = useMemo(() => {
     if(!startStation || !endStation) return [] as Array<{path:string[]; length:number}>;
@@ -228,7 +229,10 @@ export default function MetroBranches(){
     return [...aiOptions, ...defaultPathOptions];
   }, [aiOptions, defaultPathOptions]);
 
-  useEffect(() => { setPathIndex(0); }, [startStation, endStation, pathOptions.length]);
+  useEffect(() => {
+    setSelectedRoute(0);
+    setVisibleRoutes(pathOptions.map(() => true));
+  }, [pathOptions.length]);
 
   useEffect(() => {
     if(!startStation || !endStation){ setAiOptions([]); return; }
@@ -255,7 +259,7 @@ export default function MetroBranches(){
     return () => { cancelled = true; };
   }, [startStation, endStation]);
 
-  const pathInfo = pathOptions[pathIndex] ?? { path: [], length: 0 };
+  const pathInfo = pathOptions[selectedRoute] ?? { path: [], length: 0 };
   const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
   const findLineBySegment = useCallback((segId:string) => LINES.find(l=>l.segments.includes(segId)), []);
   const pathEdges = useMemo(() => {
@@ -287,20 +291,36 @@ export default function MetroBranches(){
   }, [pathSegments, pathInfo.path, findLineBySegment]);
   const [animating, setAnimating] = useState(false);
   const [animProgress, setAnimProgress] = useState(0);
+  const toggleRoute = useCallback((idx:number)=>{
+    setVisibleRoutes(v=>v.map((on,i)=>i===idx?!on:on));
+  },[]);
+
+  const variantEdges = useMemo(()=>{
+    return pathOptions.map((p,i)=>{
+      const segs = segmentsFromStations(p.path);
+      const color = distinctColor(i);
+      return segs.map((segId,j)=>{
+        const a = p.path[j];
+        const b = p.path[j+1];
+        return a && b ? {a,b,color} : undefined;
+      }).filter(Boolean) as Array<{a:string;b:string;color:string}>;
+    });
+  },[pathOptions]);
 
   const handleBuild = useCallback(() => {
-    if(pathEdges.length===0) return;
+    if(pathOptions.length===0) return;
     setBuilt(true);
-  }, [pathEdges]);
+  }, [pathOptions.length]);
 
   const handleReset = useCallback(() => {
     setBuilt(false);
     setStartStation('');
     setEndStation('');
-    setPathIndex(0);
     setAnimating(false);
     setAiOptions([]);
     setAiError(null);
+    setVisibleRoutes([]);
+    setSelectedRoute(0);
   }, []);
 
   const handleGo = useCallback(() => {
@@ -397,22 +417,34 @@ export default function MetroBranches(){
               {showBg && <MapImage blur={blur} />}
               <MapGrid />
               {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
-              {built && pathEdges.map((e,i)=>{
+              {built && variantEdges.map((edges,idx)=>visibleRoutes[idx] && edges.map((e,i)=>{
                 const a=pos[e.a], b=pos[e.b];
                 if(!a||!b) return null;
-                const len = Math.hypot(a.x-b.x,a.y-b.y);
                 return (
-                  <line key={`path_${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={e.color} strokeWidth={8} strokeLinecap="round" strokeDasharray={len} strokeDashoffset={len}>
-                    <animate attributeName="stroke-dashoffset" from={len} to="0" dur="0.8s" fill="freeze" />
-                  </line>
+                  <line
+                    key={`var_${idx}_${i}`}
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke={e.color}
+                    strokeWidth={selectedRoute===idx?8:6}
+                    strokeLinecap="round"
+                    opacity={selectedRoute===idx?1:0.6}
+                  />
                 );
-              })}
+              }))}
               {animating && vehiclePos && (
                 <text x={vehiclePos.x} y={vehiclePos.y} fontSize={40} textAnchor="middle" dominantBaseline="middle" style={{filter:'drop-shadow(0 0 2px rgba(0,0,0,0.4))'}} className="transition-transform">🚚</text>
               )}
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
+          {aiLoading && (
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div className="truck-drive text-4xl">🚛</div>
+            </div>
+          )}
           <div className="absolute bottom-2 right-2 bg-white/80 p-2 rounded shadow space-y-1">
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={showBg} onChange={e=>setShowBg(e.target.checked)} />
@@ -441,34 +473,40 @@ export default function MetroBranches(){
             {aiError && (
               <div className="text-red-600 text-center text-xs">{aiError}</div>
             )}
-            {pathOptions.length>1 && !built && (
-              <select value={pathIndex} onChange={e=>setPathIndex(Number(e.target.value))} className="w-full border p-1 rounded">
-                {pathOptions.map((p,i)=>(<option key={i} value={i}>Вариант {i+1} ({Math.round(p.length)})</option>))}
-              </select>
-            )}
             {!built && startStation && endStation && (
               <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1 transition-colors">Проложить</button>
             )}
-            {built && pathInfo.path.length>1 && (
+            {built && (
               <div className="pt-1 space-y-2">
-                <div>📏 {Math.round(pathInfo.length)}</div>
-                <div className="space-y-2">
-                  {routeDetails.map((g,i)=>(
-                    <div key={i} className="flex items-start gap-2 border rounded p-2">
-                      <div className="w-2 rounded" style={{background:g.line?.color}} />
-                      <div className="flex-1">
-                        <div className="text-xs">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
-                        {g.stations.length>2 && (
-                          <div className="text-xs text-gray-600">{g.stations.slice(1,-1).join(' → ')}</div>
-                        )}
-                      </div>
+                {pathOptions.map((p,i)=>(
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={visibleRoutes[i]} onChange={()=>toggleRoute(i)} />
+                    <input type="radio" name="routeSelect" checked={selectedRoute===i} onChange={()=>setSelectedRoute(i)} />
+                    <div>Вариант {i+1} ({Math.round(p.length)})</div>
+                  </div>
+                ))}
+                {pathInfo.path.length>1 && (
+                  <>
+                    <div>📏 {Math.round(pathInfo.length)}</div>
+                    <div className="space-y-2">
+                      {routeDetails.map((g,i)=>(
+                        <div key={i} className="flex items-start gap-2 border rounded p-2">
+                          <div className="w-2 rounded" style={{background:g.line?.color}} />
+                          <div className="flex-1">
+                            <div className="text-xs">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
+                            {g.stations.length>2 && (
+                              <div className="text-xs text-gray-600">{g.stations.slice(1,-1).join(' → ')}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                {!animating ? (
-                  <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1 transition-colors">Поехали</button>
-                ) : (
-                  <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1 transition-colors">Стоп</button>
+                    {!animating ? (
+                      <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1 transition-colors">Поехали</button>
+                    ) : (
+                      <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1 transition-colors">Стоп</button>
+                    )}
+                  </>
                 )}
               </div>
             )}

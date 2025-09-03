@@ -60,15 +60,14 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
   const intersectionsText = Array.from(intersections.entries())
     .map(([city, ids]) => `${city}: [${ids.join(", ")}]`)
     .join("\n");
-  const segmentsText = lines
-    .map(l => {
-      const edges: string[] = [];
-      for (let i = 0; i < l.stations.length - 1; i++) {
-        edges.push(`${l.stations[i]}-${l.stations[i + 1]}`);
-      }
-      return `${l.id}: ${edges.join(", ")}`;
-    })
-    .join("\n");
+  const allowedSegments = lines.flatMap(l => {
+    const segs: Array<{ from: string; to: string; branch: string }> = [];
+    for (let i = 0; i < l.stations.length - 1; i++) {
+      segs.push({ from: l.stations[i], to: l.stations[i + 1], branch: l.id });
+    }
+    return segs;
+  });
+  const allowedSegmentsText = JSON.stringify(allowedSegments);
 
   const used = new Set<string>();
   lines.forEach(l => l.stations.forEach(s => used.add(s)));
@@ -88,11 +87,11 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "2. Каждый маршрут строится только по соседним станциям ветки: нельзя перескакивать через города.",
     "3. Можно двигаться по веткам в любом направлении.",
     "4. Переход между ветками разрешён только в городах‑пересечениях.",
-    "5. Каждая пара {from,to} должна быть двумя последовательными станциями заявленной ветки и входить в список допустимых сегментов.",
+    "5. Каждый сегмент {from,to,branch} обязан точно совпадать с одним из элементов allowedSegments (порядок городов не важен).",
     "6. Указывай ВСЕ промежуточные станции маршрута и не повторяй города в пределах одного маршрута.",
     `7. Маршрут обязан начинаться строго в "${start}" и заканчиваться строго в "${end}".`,
     "8. Для каждого перехода указывай ветку (branch), по которой он выполнен.",
-    "9. Если маршрут построить нельзя, верни {\"routes\":[]}",
+    '9. Если маршрут построить нельзя, верни {"routes":[]}',
     "10. Ответ должен быть СТРОГО в формате JSON без дополнительного текста.",
     "",
     "Формат ответа:",
@@ -109,8 +108,8 @@ function buildPrompt(start: string, end: string, lines: LineInfo[]): string {
     "ПЕРЕСЕЧЕНИЯ ВЕТОК:",
     intersectionsText,
     "",
-    "ДОПУСТИМЫЕ СЕГМЕНТЫ ПО ВЕТКАМ (используй только их):",
-    segmentsText,
+    "allowedSegments:",
+    allowedSegmentsText,
     "",
     "Верни только JSON без пояснений.",
   ].join("\n");

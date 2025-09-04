@@ -201,7 +201,7 @@ function computeGeoLayout(lines: LineDef[], width:number, height:number){
   });
   // MUCH stronger repel to increase spacing between stations
   const keys = Object.keys(pos);
-  const minD = 50; // minimal distance in px between station nodes
+  const minD = 75; // minimal distance in px between station nodes
   for(let iter=0; iter<28; iter++){
     for(let i=0;i<keys.length;i++){
       for(let j=i+1;j<keys.length;j++){

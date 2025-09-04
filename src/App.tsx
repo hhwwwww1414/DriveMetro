@@ -1,17 +1,8 @@
 import React, { useMemo, useRef, useState, useCallback, useEffect } from "react";
-<<<<<<< HEAD
-import { BASE_POS, segmentsFromStations, getSegment, type XY, buildGraphFromLines, findPathsFromGraph, stationsFromSegments } from "./models/network";
-import { aiSuggestRoutes, type LineInfo, type AiRoute } from "./services/openrouter";
-
-type LineStyle = 'solid' | 'dashed' | 'dotted';
-type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
-type PathOption = { path: string[]; length: number; description?: string };
-=======
 import { BASE_POS, segmentsFromStations, getSegment, type XY } from "./models/network";
 
 type LineStyle = 'solid' | 'dashed' | 'dotted';
 type LineDef = { id: string; name: string; style: LineStyle; color: string; segments: string[] };
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
 
 const BG_URL = import.meta.env.BASE_URL + 'bg.jpg';
 const STORAGE_VISIBLE = 'metro_lines_visibility_v1';
@@ -219,173 +210,6 @@ export default function MetroBranches(){
   const svgRef = useRef<SVGSVGElement>(null);
   const labels = useMemo(()=>placeLabels(stations,pos,13,scale),[scale]);
 
-<<<<<<< HEAD
-  const [startStation, setStartStation] = useState<string>("");
-  const [endStation, setEndStation] = useState<string>("");
-  const [built, setBuilt] = useState(false);
-  const [aiOptions, setAiOptions] = useState<AiRoute[]>([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string|null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>("");
-  const [visibleRoutes, setVisibleRoutes] = useState<boolean[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState(0);
-
-  const defaultPathOptions = useMemo(() => {
-    if(!startStation || !endStation) return [] as Array<PathOption>;
-    const activeGraph = buildGraphFromLines(activeLines);
-    const paths = findPathsFromGraph(startStation, endStation, activeGraph, 5);
-    return paths.map(p => ({ ...p, description: "Автоматический поиск по сети" }));
-  }, [startStation, endStation, activeLines]);
-
-  const pathOptions: PathOption[] = useMemo(() => {
-    return [...aiOptions, ...defaultPathOptions];
-  }, [aiOptions, defaultPathOptions]);
-
-  useEffect(() => {
-    setSelectedRoute(0);
-    setVisibleRoutes(pathOptions.map(() => true));
-  }, [pathOptions.length]);
-
-  useEffect(() => {
-    if(!startStation || !endStation){ setAiOptions([]); setDebugInfo(""); return; }
-    let cancelled = false;
-    (async () => {
-      setAiLoading(true);
-      setAiError(null);
-      setDebugInfo("🔍 Поиск в базе данных и запрос к ИИ...");
-      const lineInfo: LineInfo[] = LINES.map(l => ({ id: l.id, stations: stationsFromSegments(l.segments) }));
-      try{
-        const res = await aiSuggestRoutes(startStation, endStation, lineInfo);
-        if(!cancelled){
-          setAiOptions(res);
-          if(res.length===0){
-            setAiError("Маршруты не найдены");
-            setDebugInfo("⚠️ Нет доступных маршрутов");
-          }else{
-            const csvCount = res.filter(r => r.description.includes("базы данных")).length;
-            const aiCount = res.length - csvCount;
-            setDebugInfo(`✅ Найдено: ${csvCount} из БД + ${aiCount} от ИИ = ${res.length} вариантов`);
-          }
-        }
-      }catch{
-        if(!cancelled){
-          setAiError("Ошибка поиска");
-          setAiOptions([]);
-          setDebugInfo("❌ Ошибка при поиске маршрутов");
-        }
-      }finally{
-        if(!cancelled) setAiLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [startStation, endStation]);
-
-  const pathInfo = pathOptions[selectedRoute] ?? { path: [], length: 0 };
-  const pathSegments = useMemo(() => segmentsFromStations(pathInfo.path), [pathInfo.path]);
-  const findLineBySegment = useCallback((segId:string) => LINES.find(l=>l.segments.includes(segId)), []);
-  const pathEdges = useMemo(() => {
-    return pathSegments.map((segId,i) => {
-      const line = findLineBySegment(segId);
-      const a = pathInfo.path[i];
-      const b = pathInfo.path[i+1];
-      return line && a && b ? {a, b, color: line.color, lineId: line.id} : undefined;
-    }).filter(Boolean) as Array<{a:string;b:string;color:string;lineId:string}>;
-  }, [pathSegments, findLineBySegment, pathInfo.path]);
-  const routeDetails = useMemo(() => {
-    if(pathSegments.length===0) return [] as Array<{line:LineDef|undefined; stations:string[]}>;
-    const groups:Array<{line:LineDef|undefined; stations:string[]}> = [];
-    let currentLine = findLineBySegment(pathSegments[0]);
-    let currentStations = [pathInfo.path[0], pathInfo.path[1]];
-    for(let i=1;i<pathSegments.length;i++){
-      const line = findLineBySegment(pathSegments[i]);
-      const station = pathInfo.path[i+1];
-      if(line && currentLine && line.id===currentLine.id){
-        currentStations.push(station);
-      }else{
-        groups.push({line: currentLine, stations: currentStations});
-        currentLine = line;
-        currentStations = [pathInfo.path[i], station];
-      }
-    }
-    groups.push({line: currentLine, stations: currentStations});
-    return groups;
-  }, [pathSegments, pathInfo.path, findLineBySegment]);
-  const [animating, setAnimating] = useState(false);
-  const [animProgress, setAnimProgress] = useState(0);
-  const toggleRoute = useCallback((idx:number)=>{
-    setVisibleRoutes(v=>v.map((on,i)=>i===idx?!on:on));
-  },[]);
-
-  const variantEdges = useMemo(()=>{
-    return pathOptions.map((p,i)=>{
-      const segs = segmentsFromStations(p.path);
-      const color = distinctColor(i);
-      return segs.map((segId,j)=>{
-        const a = p.path[j];
-        const b = p.path[j+1];
-        return a && b ? {a,b,color} : undefined;
-      }).filter(Boolean) as Array<{a:string;b:string;color:string}>;
-    });
-  },[pathOptions]);
-
-  const handleBuild = useCallback(() => {
-    if(pathOptions.length===0) return;
-    setBuilt(true);
-  }, [pathOptions.length]);
-
-  const handleReset = useCallback(() => {
-    setBuilt(false);
-    setStartStation('');
-    setEndStation('');
-    setAnimating(false);
-    setAiOptions([]);
-    setAiError(null);
-    setDebugInfo("");
-    setVisibleRoutes([]);
-    setSelectedRoute(0);
-  }, []);
-
-  const handleGo = useCallback(() => {
-    if(pathEdges.length===0) return;
-    setAnimating(true);
-    setAnimProgress(0);
-  }, [pathEdges]);
-
-  useEffect(()=>{
-    if(!animating) return;
-    const duration = 10000;
-    const start = performance.now();
-    let raf:number;
-    const step = (now:number)=>{
-      const t = Math.min((now-start)/duration,1);
-      setAnimProgress(t);
-      if(t<1) raf=requestAnimationFrame(step); else setAnimating(false);
-    };
-    raf=requestAnimationFrame(step);
-    return ()=>cancelAnimationFrame(raf);
-  },[animating]);
-
-  const vehiclePos = useMemo(()=>{
-    if(pathEdges.length===0) return null;
-    const total = pathEdges.reduce((s,e)=>{
-      const a=pos[e.a], b=pos[e.b];
-      return s+Math.hypot(a.x-b.x,a.y-b.y);
-    },0);
-    let d = total*animProgress;
-    for(const e of pathEdges){
-      const a=pos[e.a], b=pos[e.b];
-      const len=Math.hypot(a.x-b.x,a.y-b.y);
-      if(d<=len){
-        const t=d/len;
-        return {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t};
-      }
-      d-=len;
-    }
-    return null;
-  },[animProgress,pathEdges,pos]);
-
-=======
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
   const containerWidth=1200, containerHeight=800;
 
   const handleZoom = useCallback((delta:number, centerX?:number, centerY?:number)=>{
@@ -432,10 +256,7 @@ export default function MetroBranches(){
   useEffect(()=>{ const el=svgRef.current; if(!el) return; el.addEventListener('touchstart',handleTouchStart,{passive:false}); el.addEventListener('touchmove',handleTouchMove,{passive:false}); el.addEventListener('touchend',handleTouchEnd,{passive:false}); el.addEventListener('touchcancel',handleTouchEnd,{passive:false}); return ()=>{ el.removeEventListener('touchstart',handleTouchStart); el.removeEventListener('touchmove',handleTouchMove); el.removeEventListener('touchend',handleTouchEnd); el.removeEventListener('touchcancel',handleTouchEnd); }; },[handleTouchStart,handleTouchMove,handleTouchEnd]);
   const resetView = useCallback(()=>{ setScale(0.6); setTranslateX(300); setTranslateY(150); },[]);
 
-<<<<<<< HEAD
-=======
 
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
   return (
     <div className="w-full bg-white text-gray-900 min-h-screen">
       <div className="bg-white border-b p-3 flex items-center gap-2">
@@ -451,10 +272,7 @@ export default function MetroBranches(){
         <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-r p-3 h-screen overflow-y-auto shadow-lg">
           <h3 className="font-bold text-base mb-2 text-gray-800">Коридоры</h3>
           <LegendCorridors CORRIDORS={CORRIDORS} LINES={LINES} visible={visible} toggleCorridor={toggleCorridor} soloCorridor={soloCorridor} toggleLine={toggleLine} showAll={showAllCorridors} hideAll={hideAllCorridors} />
-<<<<<<< HEAD
-=======
 
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
         </div>
         <div className="flex-1 overflow-hidden relative">
           <svg
@@ -472,42 +290,10 @@ export default function MetroBranches(){
             <g transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               {showBg && <MapImage blur={blur} />}
               <MapGrid />
-<<<<<<< HEAD
-              {!built && <RouteLines lines={activeLines} pos={pos} allLines={LINES} />}
-              {built && variantEdges.map((edges,idx)=>visibleRoutes[idx] && edges.map((e,i)=>{
-                const a=pos[e.a], b=pos[e.b];
-                if(!a||!b) return null;
-                return (
-                  <line
-                    key={`var_${idx}_${i}`}
-                    x1={a.x}
-                    y1={a.y}
-                    x2={b.x}
-                    y2={b.y}
-                    stroke={e.color}
-                    strokeWidth={selectedRoute===idx?8:6}
-                    strokeLinecap="round"
-                    opacity={selectedRoute===idx?1:0.6}
-                  />
-                );
-              }))}
-              {animating && vehiclePos && (
-                <text x={vehiclePos.x} y={vehiclePos.y} fontSize={40} textAnchor="middle" dominantBaseline="middle" style={{filter:'drop-shadow(0 0 2px rgba(0,0,0,0.4))'}} className="transition-transform">🚚</text>
-              )}
-              <StationsAndLabels stations={stations} pos={pos} labels={labels} />
-            </g>
-          </svg>
-          {aiLoading && (
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-              <div className="truck-drive text-4xl">🚛</div>
-            </div>
-          )}
-=======
               <RouteLines lines={activeLines} pos={pos} allLines={LINES} />
               <StationsAndLabels stations={stations} pos={pos} labels={labels} />
             </g>
           </svg>
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
           <div className="absolute bottom-2 right-2 bg-white/80 p-2 rounded shadow space-y-1">
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={showBg} onChange={e=>setShowBg(e.target.checked)} />
@@ -517,83 +303,6 @@ export default function MetroBranches(){
             <input type="range" min={0} max={100} value={blur} onChange={e=>setBlur(Number(e.target.value))} className="w-32" disabled={!showBg} />
           </div>
         </div>
-<<<<<<< HEAD
-        <div className="w-80 bg-gradient-to-b from-white to-gray-50 border-l p-3 h-screen overflow-y-auto relative shadow-lg">
-          {built && (
-            <button onClick={handleReset} className="absolute top-1 right-1 text-gray-400 hover:text-gray-600">✕</button>
-          )}
-          <div className="space-y-2 text-sm">
-            <select value={startStation} onChange={e=>setStartStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
-              <option value="">🚩 Откуда</option>
-              {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
-            </select>
-            <select value={endStation} onChange={e=>setEndStation(e.target.value)} disabled={built} className="w-full border p-1 rounded">
-              <option value="">🏁 Куда</option>
-              {stations.map(s=>(<option key={s} value={s}>{s}</option>))}
-            </select>
-            {aiLoading && (
-              <div className="flex justify-center py-2"><div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" /></div>
-            )}
-            {aiError && (
-              <div className="text-red-600 text-center text-xs p-2 bg-red-50 rounded border">{aiError}</div>
-            )}
-            {debugInfo && (
-              <div className="text-gray-500 text-center text-xs p-2">{debugInfo}</div>
-            )}
-            {!built && startStation && endStation && (
-              <button onClick={handleBuild} className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded py-1 transition-colors">Проложить</button>
-            )}
-            {built && (
-              <div className="pt-1 space-y-2">
-                {pathOptions.map((p,i)=>(
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <input type="checkbox" checked={visibleRoutes[i]} onChange={()=>toggleRoute(i)} />
-                    <input type="radio" name="routeSelect" checked={selectedRoute===i} onChange={()=>setSelectedRoute(i)} />
-                    <div className="flex-1">
-                      <div>Вариант {i+1} ({Math.round(p.length)})</div>
-                      {i < aiOptions.length && (
-                        <div className="text-gray-500 text-xs">
-                          {p.description?.includes('базы данных') ? '📊 Из БД' : 
-                           p.description?.includes('ИИ') ? '🤖 От ИИ' : '🔍 Найден'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {pathInfo.path.length>1 && (
-                  <>
-                    <div className="border-t pt-2">
-                      <div className="text-sm font-medium">📏 Длина: {Math.round(pathInfo.length)}</div>
-                      {pathInfo.description && (
-                        <div className="text-xs text-gray-600 mt-1">{pathInfo.description}</div>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {routeDetails.map((g,i)=>(
-                        <div key={i} className="flex items-start gap-2 border rounded p-2">
-                          <div className="w-2 h-4 rounded" style={{background:g.line?.color}} />
-                          <div className="flex-1">
-                            <div className="text-xs font-medium">{g.stations[0]} → {g.stations[g.stations.length-1]}</div>
-                            {g.stations.length>2 && (
-                              <div className="text-xs text-gray-600">{g.stations.slice(1,-1).join(' → ')}</div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {!animating ? (
-                      <button onClick={handleGo} className="w-full bg-green-500 hover:bg-green-600 text-white rounded py-1 transition-colors">Поехали</button>
-                    ) : (
-                      <button onClick={()=>setAnimating(false)} className="w-full bg-red-500 hover:bg-red-600 text-white rounded py-1 transition-colors">Стоп</button>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-=======
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
       </div>
     </div>
   );
@@ -678,10 +387,7 @@ function LegendCorridors({CORRIDORS, LINES, visible, toggleCorridor, soloCorrido
                   const isOn = visible[id] !== false;
                   return (
                     <div key={id} className="flex items-center gap-2 text-xs transition-opacity" style={{opacity:isOn?1:0.4}}>
-<<<<<<< HEAD
-=======
 
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
                       <input type="checkbox" checked={isOn} onChange={()=>toggleLine(id)} />
                       <div className="w-6 h-0 border-b-4" style={{borderColor:l.color, borderBottomStyle:l.style==='solid'?'solid':(l.style==='dashed'?'dashed':'dotted')}} />
                       <div title={l.name}>{l.name}</div>

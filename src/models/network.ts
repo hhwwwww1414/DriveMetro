@@ -4,82 +4,78 @@ export type Segment = { id: string; from: string; to: string; length?: number };
 export type Route = { id: string; name: string; segments: string[] };
 
 export const BASE_POS: Record<string, XY> = {
-  "Абакан": {x:1920, y:600},
-  "Астрахань": {x:480, y:1320},
-  "Барнаул": {x:1560, y:600},
-  "Биробиджан": {x:2520, y:600},
-  "Благовещенск": {x:2400, y:600},
-  "Будённовск": {x:360, y:1320},
-  "Владивосток": {x:2640, y:1200},
-  "Владикавказ": {x:240, y:1440},
-  "Владимир": {x:120, y:480},
-  "Волгоград": {x:240, y:960},
-  "Вологда": {x:0, y:240},
-  "Воронеж": {x:-120, y:840},
-  "Горно-Алтайск": {x:1680, y:720},
-  "Грозный": {x:360, y:1440},
-  "Екатеринбург": {x:960, y:360},
-  "Ижевск": {x:720, y:360},
-  "Иркутск": {x:2040, y:480},
-  "Йошкар-Ола": {x:480, y:360},
-  "Якутск": {x:2400, y:120},
-  "Казань": {x:600, y:480},
-  "Кемерово": {x:1680, y:480},
-  "Керчь": {x:-360, y:1020},
-  "Киров": {x:120, y:240},
-  "Краснодар": {x:-240, y:1020},
-  "Красноярск": {x:1920, y:480},
-  "Курган": {x:1200, y:600},
-  "Кызыл": {x:1920, y:720},
-  "Магадан": {x:3000, y:240},
-  "Мариуполь": {x:-240, y:960},
-  "Махачкала": {x:480, y:1560},
-  "Медвежьегорск": {x:-120, y:120},
-  "Мелитополь": {x:-360, y:960},
-  "Минеральные Воды": {x:0, y:1200},
-  "Москва": {x:-120, y:480},
-  "Мурманск": {x:-120, y:0},
-  "Набережные Челны": {x:720, y:480},
-  "Нальчик": {x:120, y:1320},
-  "Невинномысск": {x:-120, y:1080},
-  "Нижневартовск": {x:1440, y:120},
-  "Нижний Новгород": {x:240, y:480},
-  "Новокузнецк": {x:1680, y:600},
-  "Новосибирск": {x:1560, y:480},
-  "Новый Уренгой": {x:1200, y:0},
-  "Омск": {x:1320, y:480},
-  "Оренбург": {x:720, y:840},
-  "Орск": {x:840, y:840},
-  "Пенза": {x:360, y:720},
-  "Пермь": {x:720, y:240},
-  "Петрозаводск": {x:-240, y:240},
-  "Ростов-на-Дону": {x:-120, y:960},
-  "Рязань": {x:120, y:600},
-  "Санкт-Петербург": {x:-240, y:360},
-  "Саратов": {x:360, y:840},
-  "Свободный": {x:2460, y:480},
-  "Севастополь": {x:-600, y:1020},
-  "Симферополь": {x:-480, y:1020},
-  "Сковородино": {x:2400, y:480},
-  "Сургут": {x:1200, y:120},
-  "Сыктывкар": {x:240, y:120},
-  "Тамбов": {x:120, y:720},
-  "Тверь": {x:-120, y:420},
-  "Тольятти": {x:600, y:720},
-  "Томск": {x:1680, y:360},
-  "Тюмень": {x:1200, y:360},
-  "Улан-Удэ": {x:2160, y:480},
-  "Уссурийск": {x:2640, y:960},
-  "Уфа": {x:720, y:600},
-  "Хабаровск": {x:2640, y:720},
-  "Ханты-Мансийск": {x:960, y:120},
-  "Чебоксары": {x:480, y:480},
-  "Челябинск": {x:960, y:600},
-  "Чита": {x:2280, y:480},
-  "Элиста": {x:240, y:1080},
-  "Ярославль": {x:0, y:360},
-  "Великий Новгород": {x:-180, y:360},
-  "Бийск": {x:1620, y:660}
+  "Абакан": {x:115, y:55},
+  "Архангельск": {x:30, y:70},
+  "Астрахань": {x:40, y:40},
+  "Барнаул": {x:105, y:55},
+  "Бийск": {x:100, y:50},
+  "Великий Новгород": {x:15, y:60},
+  "Владивосток": {x:175, y:35},
+  "Владикавказ": {x:45, y:35},
+  "Владимир": {x:30, y:60},
+  "Волгоград": {x:35, y:45},
+  "Вологда": {x:30, y:65},
+  "Воронеж": {x:25, y:50},
+  "Грозный": {x:35, y:35},
+  "Екатеринбург": {x:60, y:60},
+  "Ижевск": {x:80, y:60},
+  "Иркутск": {x:130, y:50},
+  "Йошкар-Ола": {x:75, y:60},
+  "Казань": {x:40, y:55},
+  "Калининград": {x:-5, y:55},
+  "Кемерово": {x:100, y:55},
+  "Керчь": {x:50, y:40},
+  "Киров": {x:50, y:60},
+  "Кострома": {x:65, y:60},
+  "Краснодар": {x:25, y:40},
+  "Красноярск": {x:110, y:55},
+  "Курган": {x:70, y:55},
+  "Кызыл": {x:115, y:50},
+  "Мариуполь": {x:30, y:45},
+  "Махачкала": {x:40, y:35},
+  "Медвежьегорск": {x:20, y:70},
+  "Мелитополь": {x:20, y:45},
+  "Минеральные Воды": {x:45, y:40},
+  "Москва": {x:25, y:55},
+  "Мурманск": {x:15, y:80},
+  "Набережные Челны": {x:50, y:55},
+  "Нальчик": {x:50, y:35},
+  "Невинномысск": {x:30, y:40},
+  "Нижневартовск": {x:85, y:65},
+  "Нижний Новгород": {x:35, y:60},
+  "Новокузнецк": {x:120, y:55},
+  "Новосибирск": {x:95, y:55},
+  "Новый Уренгой": {x:85, y:75},
+  "Омск": {x:80, y:55},
+  "Оренбург": {x:50, y:50},
+  "Орск": {x:60, y:50},
+  "Пенза": {x:35, y:55},
+  "Пермь": {x:55, y:60},
+  "Петрозаводск": {x:20, y:65},
+  "Ростов-на-Дону": {x:25, y:45},
+  "Рязань": {x:30, y:55},
+  "Санкт-Петербург": {x:10, y:65},
+  "Саратов": {x:35, y:50},
+  "Свободный": {x:170, y:50},
+  "Севастополь": {x:15, y:40},
+  "Симферополь": {x:20, y:40},
+  "Сковородино": {x:160, y:55},
+  "Сургут": {x:80, y:65},
+  "Сыктывкар": {x:45, y:65},
+  "Тверь": {x:20, y:60},
+  "Тольятти": {x:45, y:55},
+  "Томск": {x:100, y:60},
+  "Тюмень": {x:70, y:60},
+  "Улан-Удэ": {x:135, y:50},
+  "Уфа": {x:55, y:55},
+  "Хабаровск": {x:180, y:45},
+  "Ханты-Мансийск": {x:75, y:65},
+  "Чебоксары": {x:40, y:60},
+  "Челябинск": {x:60, y:55},
+  "Чита": {x:145, y:50},
+  "Элиста": {x:35, y:40},
+  "Якутск": {x:170, y:65},
+  "Ярославль": {x:45, y:60}
 };
 
 const segmentMap = new Map<string, Segment>();
@@ -125,100 +121,4 @@ export function stationsFromSegments(ids: string[]): string[] {
     }
   }
   return result;
-<<<<<<< HEAD
-}
-
-
-function buildGraph(){
-  const graph = new Map<string, Array<{to: string; weight: number}>>();
-  segmentMap.forEach(seg => {
-    const aPos = BASE_POS[seg.from];
-    const bPos = BASE_POS[seg.to];
-    if(!aPos || !bPos) return;
-    const len = seg.length ?? Math.hypot(aPos.x - bPos.x, aPos.y - bPos.y);
-    if(!graph.has(seg.from)) graph.set(seg.from, []);
-    if(!graph.has(seg.to)) graph.set(seg.to, []);
-    graph.get(seg.from)!.push({to: seg.to, weight: len});
-    graph.get(seg.to)!.push({to: seg.from, weight: len});
-  });
-  return graph;
-}
-
-export function buildGraphFromLines(lines: Array<{segments: string[]}>): Map<string, Array<{to: string; weight: number}>> {
-  const graph = new Map<string, Array<{to: string; weight: number}>>();
-  const allSegments = new Set<string>();
-  lines.forEach(line => line.segments.forEach(seg => allSegments.add(seg)));
-  allSegments.forEach(segId => {
-    const seg = getSegment(segId);
-    if(!seg) return;
-    const aPos = BASE_POS[seg.from];
-    const bPos = BASE_POS[seg.to];
-    if(!aPos || !bPos) return;
-    const len = Math.hypot(aPos.x - bPos.x, aPos.y - bPos.y);
-    if(!graph.has(seg.from)) graph.set(seg.from, []);
-    if(!graph.has(seg.to)) graph.set(seg.to, []);
-    graph.get(seg.from)!.push({to: seg.to, weight: len});
-    graph.get(seg.to)!.push({to: seg.from, weight: len});
-  });
-  return graph;
-}
-
-export function findPaths(start: string, end: string, limit = 3): Array<{ path: string[]; length: number }> {
-  if(start === end) return [{ path: [start], length: 0 }];
-  const graph = buildGraph();
-  const results: Array<{path:string[]; length:number}> = [];
-  const queue: Array<{path:string[]; length:number}> = [{ path:[start], length:0 }];
-  const best = new Map<string, number>();
-
-  while(queue.length > 0 && results.length < limit){
-    queue.sort((a,b)=>a.length-b.length);
-    const cur = queue.shift()!;
-    const last = cur.path[cur.path.length-1];
-    if(last === end){
-      results.push(cur);
-      continue;
-    }
-    const neigh = graph.get(last) ?? [];
-    for(const {to, weight} of neigh){
-      if(cur.path.includes(to)) continue;
-      const newLen = cur.length + weight;
-      if(best.has(to) && best.get(to)! <= newLen) continue;
-      best.set(to, newLen);
-      queue.push({ path:[...cur.path, to], length: newLen });
-    }
-  }
-
-  return results;
-}
-
-export function findPathsFromGraph(start: string, end: string, graph: Map<string, Array<{to: string; weight: number}>>, limit = 3): Array<{path:string[]; length:number}> {
-  if(start === end) return [{ path: [start], length: 0 }];
-  const results: Array<{path:string[]; length:number}> = [];
-  const queue: Array<{path:string[]; length:number}> = [{ path:[start], length:0 }];
-  const best = new Map<string, number>();
-  while(queue.length > 0 && results.length < limit){
-    queue.sort((a,b)=>a.length-b.length);
-    const cur = queue.shift()!;
-    const last = cur.path[cur.path.length-1];
-    if(last === end){
-      results.push(cur);
-      continue;
-    }
-    const neigh = graph.get(last) ?? [];
-    for(const {to, weight} of neigh){
-      if(cur.path.includes(to)) continue;
-      const newLen = cur.length + weight;
-      if(best.has(to) && best.get(to)! <= newLen) continue;
-      best.set(to, newLen);
-      queue.push({ path:[...cur.path, to], length: newLen });
-    }
-  }
-  return results;
-}
-
-export function findPath(start: string, end: string){
-  const [best] = findPaths(start, end, 1);
-  return best ?? { path: [], length: Infinity };
-=======
->>>>>>> f72efb26fc22be4f460240749ac9a0be3b8e6e81
 }
